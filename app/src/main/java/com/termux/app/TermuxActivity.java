@@ -67,6 +67,8 @@ import androidx.viewpager.widget.ViewPager;
 
 import java.util.Arrays;
 
+import cn.net.xiangxiang.seeker.HomeWebViewActivity;
+
 /**
  * A terminal emulator activity.
  * <p/>
@@ -427,6 +429,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         // Update the {@link TerminalSession} and {@link TerminalEmulator} clients.
         mTermuxService.setTermuxTerminalSessionClient(mTermuxTerminalSessionActivityClient);
+
+        // 延迟1秒后启动 HomeWebViewActivity
+        new android.os.Handler().postDelayed(() -> {
+            if (!isFinishing() && !isDestroyed()) {
+                Intent intent1 = new Intent(TermuxActivity.this, HomeWebViewActivity.class);
+                startActivity(intent1);
+            }
+        }, 1000);
     }
 
     @Override

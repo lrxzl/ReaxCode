@@ -47,8 +47,9 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="false"
         android:theme="@style/Theme.TermuxApp.DayNight.DarkActionBar"
+        android:usesCleartextTraffic="true"
         tools:targetApi="m">
-
+<!--android:usesCleartextTraffic="true"-->
         <activity
             android:name=".app.TermuxActivity"
             android:exported="true"
@@ -115,6 +116,20 @@
             android:resizeableActivity="true"
             android:taskAffinity="${TERMUX_PACKAGE_NAME}.filereceiver"
             tools:targetApi="n">
+        </activity>
+
+        <activity
+            android:name="cn.net.xiangxiang.seeker.HomeWebViewActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|smallestScreenSize|density|screenLayout|keyboard|keyboardHidden|navigation"
+            android:label="@string/application_name"
+            android:launchMode="singleTask"
+            android:resizeableActivity="true"
+            android:theme="@style/Theme.TermuxApp.DayNight.NoActionBar"
+            tools:targetApi="n">
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
         </activity>
 
         <activity-alias

@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Termux Home</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #e0e0e0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 状态栏 */
+        .status-bar {
+            background: #16213e;
+            padding: 8px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #0f3460;
+            font-size: 13px;
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #00ff88;
+            display: inline-block;
+            margin-right: 6px;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* 系统信息区域 */
+        .system-info {
+            background: #0f3460;
+            padding: 12px 16px;
+            margin: 12px;
+            border-radius: 8px;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .info-label {
+            color: #e94560;
+            font-weight: bold;
+        }
+
+        /* 终端输出区域 */
+        #terminal {
+            flex: 1;
+            background: #0a0a1a;
+            margin: 0 12px;
+            padding: 12px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.5;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+            max-height: 50vh;
+            border: 1px solid #0f3460;
+        }
+
+        #terminal .prompt {
+            color: #00ff88;
+        }
+
+        #terminal .command {
+            color: #e0e0e0;
+        }
+
+        #terminal .output {
+            color: #a0a0b0;
+        }
+
+        #terminal .error {
+            color: #e94560;
+        }
+
+        /* 输入区域 */
+        .input-area {
+            display: flex;
+            margin: 12px;
+            gap: 8px;
+        }
+
+        #cmdInput {
+            flex: 1;
+            padding: 10px 14px;
+            background: #0a0a1a;
+            border: 1px solid #0f3460;
+            border-radius: 8px;
+            color: #e0e0e0;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        #cmdInput:focus {
+            border-color: #00ff88;
+        }
+
+        #executeBtn {
+            padding: 10px 20px;
+            background: #e94560;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.3s, transform 0.1s;
+            white-space: nowrap;
+        }
+
+        #executeBtn:active {
+            background: #c23152;
+            transform: scale(0.96);
+        }
+
+        #executeBtn:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+
+        /* 快捷按钮 */
+        .quick-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin: 0 12px 12px;
+        }
+
+        .quick-btn {
+            padding: 6px 14px;
+            background: #16213e;
+            border: 1px solid #0f3460;
+            border-radius: 20px;
+            color: #a0a0b0;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .quick-btn:active {
+            background: #0f3460;
+            color: #00ff88;
+            border-color: #00ff88;
+        }
+
+        /* 滚动条样式 */
+        #terminal::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        #terminal::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        #terminal::-webkit-scrollbar-thumb {
+            background: #0f3460;
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body>
+    <!-- 状态栏 -->
+    <div class="status-bar">
+        <span>
+            <span class="status-indicator"></span>
+            Termux Web
+        </span>
+        <span id="sessionInfo">Session: 0 | Task: 0</span>
+    </div>
+
+    <!-- 系统信息 -->
+    <div class="system-info" id="sysInfo">
+        <span class="info-label">系统:</span> 加载中...
+    </div>
+
+    <!-- 终端输出区域 -->
+    <div id="terminal">
+        <div class="prompt">$ </div>
+    </div>
+
+    <!-- 快捷命令按钮 -->
+    <div class="quick-buttons">
+        <button class="quick-btn" onclick="runQuickCmd('ls -la')">ls -la</button>
+        <button class="quick-btn" onclick="runQuickCmd('pwd')">pwd</button>
+        <button class="quick-btn" onclick="runQuickCmd('whoami')">whoami</button>
+        <button class="quick-btn" onclick="runQuickCmd('uname -a')">uname -a</button>
+        <button class="quick-btn" onclick="runQuickCmd('ps')">ps</button>
+        <button class="quick-btn" onclick="runQuickCmd('date')">date</button>
+        <button class="quick-btn" onclick="clearTerminal()">清屏</button>
+        <button class="quick-btn" onclick="refreshSystemInfo()">刷新</button>
+        <button class="quick-btn" onclick="test()">test</button>
+        <button class="quick-btn" onclick="forward()">forward</button>
+    </div>
+
+    <!-- 命令输入区域 -->
+    <div class="input-area">
+        <input type="text" id="cmdInput" placeholder="输入命令..." 
+               autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false">
+        <button id="executeBtn" onclick="executeCommand()">执行</button>
+    </div>
+
+    <script>
+        // ========== 全局变量 ==========
+        var commandHistory = [];
+        var historyIndex = -1;
+
+        function forward() {
+            location.href = prompt('https://seeker-vue.xiangxiang.net.cn', 'https://seeker-vue.xiangxiang.net.cn/')
+        }
+
+        // ========== 桥接就绪回调 ==========
+        /**
+         * 当WebView加载完成后，Java端会调用此函数通知JS桥接已就绪
+         */
+        function onBridgeReady() {
+            console.log('[Termux Web] JavaBridge 桥接已就绪');
+            appendTerminal('system', '桥接已就绪，可以执行命令');
+            refreshSystemInfo();
+        }
+
+        function test() {
+            appendTerminal('system', 'test-->');
+            appendTerminal('system', JavaBridge.invokeMethod( 'exec', JSON.stringify([ 'whoami', {  } ]) ) );
+/*
+            let result = JavaBridge.invokeMethod( 'listFiles', JSON.stringify([ '/data/data/com.termux/', null, 2 ]));
+            result = JSON.parse(result).data;
+            appendTerminal('system', result.toString() );
+*/
+            // search(String rootDir, String filePattern, String contentRegex, int contextLineCount)
+            // /com.termux_preferences.xml
+            result = JavaBridge.invokeMethod( 'search', JSON.stringify([ '/data/data/com.termux/shared_prefs', null, 'current_session', 2 ]));
+            // appendTerminal('system', result.toString() );
+            result = JSON.parse(result).data;
+            appendTerminal('system', result.toString() );
+
+        }
+
+        // ========== 系统信息刷新 ==========
+        function refreshSystemInfo() {
+            try {
+                if (typeof window.JavaBridge !== 'undefined' && window.JavaBridge.getSystemInfo) {
+                    var infoJson = window.JavaBridge.getSystemInfo();
+                    var info = JSON.parse(infoJson);
+                    
+                    var sysInfoEl = document.getElementById('sysInfo');
+                    sysInfoEl.innerHTML = '<span class="info-label">系统:</span> ' + info.uname +
+                        ' &nbsp;|&nbsp; <span class="info-label">Session:</span> ' + info.sessionCount +
+                        ' &nbsp;|&nbsp; <span class="info-label">Task:</span> ' + info.taskCount;
+                    
+                    document.getElementById('sessionInfo').textContent = 
+                        'Session: ' + info.sessionCount + ' | Task: ' + info.taskCount;
+                } else {
+                    document.getElementById('sysInfo').innerHTML = 
+                        '<span class="info-label">系统:</span> JavaBridge未就绪';
+                }
+            } catch (e) {
+                document.getElementById('sysInfo').innerHTML = 
+                    '<span class="info-label">系统:</span> 获取失败: ' + e.message;
+            }
+        }
+
+        // ========== 命令执行 ==========
+        /** 执行用户输入的命令 */
+        function executeCommand() {
+            var inputEl = document.getElementById('cmdInput');
+            var btnEl = document.getElementById('executeBtn');
+            var command = inputEl.value.trim();
+
+            if (!command) {
+                appendTerminal('error', '请输入命令');
+                return;
+            }
+
+            // 将命令加入历史
+            commandHistory.push(command);
+            historyIndex = commandHistory.length;
+
+            // 显示命令
+            appendTerminal('prompt', '$');
+            appendTerminal('command', ' ' + command);
+
+            // 检查JavaBridge是否可用
+            if (typeof window.JavaBridge === 'undefined') {
+                appendTerminal('error', '错误: JavaBridge未就绪，请等待页面加载完成');
+                inputEl.value = '';
+                return;
+            }
+
+            // 禁用按钮显示加载状态
+            btnEl.disabled = true;
+            btnEl.textContent = '执行中...';
+
+            try {
+                // 使用同步接口执行命令（直接返回JSON结果）
+                var resultJson = window.JavaBridge.exec( command, {"timeoutMs": 1000} );
+                var result = JSON.parse(resultJson);
+
+                if (result.error) {
+                    appendTerminal('error', '错误: ' + result.error);
+                } else {
+                    if (result.stdout) {
+                        appendTerminal('output', result.stdout);
+                    }
+                    if (result.stderr) {
+                        appendTerminal('error', result.stderr);
+                    }
+                    if (result.exitCode !== undefined && result.exitCode !== 0) {
+                        appendTerminal('error', '[退出码: ' + result.exitCode + ']');
+                    }
+                }
+            } catch (e) {
+                appendTerminal('error', '执行异常: ' + e.message);
+            } finally {
+                btnEl.disabled = false;
+                btnEl.textContent = '执行';
+            }
+
+            // 清空输入
+            inputEl.value = '';
+            
+            // 自动滚动到底部
+            scrollToBottom();
+            
+            // 刷新状态信息
+            refreshSystemInfo();
+        }
+
+        /** 执行快捷命令 */
+        function runQuickCmd(cmd) {
+            document.getElementById('cmdInput').value = cmd;
+            executeCommand();
+        }
+
+        // ========== 终端输出 ==========
+        /** 向终端区域追加内容 */
+        function appendTerminal(type, text) {
+            var terminalEl = document.getElementById('terminal');
+            var lineEl = document.createElement('div');
+            lineEl.className = type;
+            
+            if (type === 'output' || type === 'error') {
+                // 对于多行输出，保留格式
+                lineEl.textContent = text;
+            } else if (type === 'prompt') {
+                lineEl.textContent = text;
+            } else if (type === 'command') {
+                lineEl.textContent = text;
+            } else {
+                lineEl.textContent = text;
+            }
+            
+            terminalEl.appendChild(lineEl);
+            scrollToBottom();
+        }
+
+        /** 清屏 */
+        function clearTerminal() {
+            var terminalEl = document.getElementById('terminal');
+            terminalEl.innerHTML = '<div class="prompt">$ </div>';
+            appendTerminal('system', '屏幕已清除');
+        }
+
+        /** 滚动到终端底部 */
+        function scrollToBottom() {
+            var terminalEl = document.getElementById('terminal');
+            terminalEl.scrollTop = terminalEl.scrollHeight;
+        }
+
+        // ========== 键盘事件 ==========
+        document.addEventListener('DOMContentLoaded', function() {
+            var inputEl = document.getElementById('cmdInput');
+            
+            // 回车键执行命令
+            inputEl.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' || e.keyCode === 13) {
+                    e.preventDefault();
+                    executeCommand();
+                }
+                // 上箭头浏览历史命令
+                else if (e.key === 'ArrowUp' || e.keyCode === 38) {
+                    e.preventDefault();
+                    if (commandHistory.length > 0) {
+                        if (historyIndex > 0) {
+                            historyIndex--;
+                        }
+                        if (historyIndex >= 0 && historyIndex < commandHistory.length) {
+                            inputEl.value = commandHistory[historyIndex];
+                        }
+                    }
+                }
+                // 下箭头浏览历史命令
+                else if (e.key === 'ArrowDown' || e.keyCode === 40) {
+                    e.preventDefault();
+                    if (historyIndex < commandHistory.length - 1) {
+                        historyIndex++;
+                        inputEl.value = commandHistory[historyIndex];
+                    } else {
+                        historyIndex = commandHistory.length;
+                        inputEl.value = '';
+                    }
+                }
+            });
+
+            // 初始加载展示
+            appendTerminal('system', '欢迎使用 Termux Web 控制台');
+            appendTerminal('system', '输入命令开始使用，或点击下方快捷按钮');
+            appendTerminal('system', '---');
+        });
+
+        // ========== 测试：如果桥接在DOMContentLoaded之后才就绪 ==========
+        // onBridgeReady 由Java端在页面加载完成后调用
+        console.log('[Termux Web] 页面脚本已加载，等待JavaBridge就绪...');
+    </script>
+</body>
+</html>
