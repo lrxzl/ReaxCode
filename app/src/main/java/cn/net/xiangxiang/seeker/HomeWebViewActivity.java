@@ -81,7 +81,8 @@ public class HomeWebViewActivity extends AppCompatActivity {
 //        mWebView.loadUrl("file:///android_asset/dist/index.html");
         runOnUiThread(() -> {
 //            mWebView.loadUrl("file:///android_asset/home.html");
-            mWebView.loadUrl("http://192.168.1.129:8084/");
+//            mWebView.loadUrl("http://192.168.1.129:8084/");
+            mWebView.loadUrl("https://seeker-vue.xiangxiang.net.cn");
         });
         // mWebView.loadUrl("https://seeker-vue.xiangxiang.net.cn");
 //         mWebView.loadUrl("http://192.168.1.129:8084/");
