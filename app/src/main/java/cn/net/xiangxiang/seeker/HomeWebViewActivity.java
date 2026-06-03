@@ -87,7 +87,6 @@ public class HomeWebViewActivity extends AppCompatActivity {
         // mWebView.loadUrl("https://seeker-vue.xiangxiang.net.cn");
 //         mWebView.loadUrl("http://192.168.1.129:8084/");
 
-
     }
 
     /**

