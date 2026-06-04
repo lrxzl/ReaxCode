@@ -18,6 +18,8 @@ import android.view.Gravity;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
+import android.view.MotionEvent;
+
 import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
@@ -161,9 +163,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** HomeWebView 相关 */
     private WebView mHomeWebView;
+
+    /** 控制启动后默认显示 WebView 还是终端，true=WebView, false=终端 */
+    private boolean mStartWithWebView = true;
     private TermuxManager mHomeWebViewTermuxManager;
     private JavaBridge mHomeWebViewJavaBridge;
-
 
     /**
      * If between onResume() and onStop(). Note that only one session is in the foreground of the terminal view at the
@@ -243,6 +247,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         configureHomeWebView(mHomeWebView);
         mHomeWebView.addJavascriptInterface(mHomeWebViewJavaBridge, "JavaBridge");
         mHomeWebView.loadUrl("https://seeker-vue.xiangxiang.net.cn");
+
+
+        // 根据 mStartWithWebView 控制 WebView 可见性
+        mIsShowingWebView = mStartWithWebView;
+
+        mHomeWebView.setVisibility(mStartWithWebView ? View.VISIBLE : View.GONE);
 
 
         // Load termux shared preferences
@@ -514,6 +524,47 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         AppCompatActivityUtils.setNightMode(this, NightMode.getAppNightMode().getName(), true);
     }
 
+
+
+    /** 快速点击计数相关 */
+    private long mLastTapTime = 0;
+    private int mTapCount = 0;
+    private boolean mIsShowingWebView = true;
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent ev) {
+        if (ev.getAction() == MotionEvent.ACTION_DOWN) {
+            final long now = System.currentTimeMillis();
+            if (now - mLastTapTime < 400) {
+                mTapCount++;
+                if (mTapCount == 6) {
+                    mTapCount = 0;
+                    toggleWebViewTerminal();
+                    return true;
+                }
+            } else {
+                mTapCount = 1;
+            }
+            mLastTapTime = now;
+        }
+        return super.dispatchTouchEvent(ev);
+    }
+
+    private void toggleWebViewTerminal() {
+        mIsShowingWebView = !mIsShowingWebView;
+        runOnUiThread(() -> {
+            if (mHomeWebView != null) {
+                mHomeWebView.setVisibility(mIsShowingWebView ? View.VISIBLE : View.GONE);
+            }
+            if (mTerminalView != null) {
+                mTerminalView.setVisibility(mIsShowingWebView ? View.GONE : View.VISIBLE);
+            }
+            Toast.makeText(TermuxActivity.this,
+                mIsShowingWebView ? R.string.msg_switch_to_webview : R.string.msg_switch_to_terminal,
+                Toast.LENGTH_SHORT).show();
+        });
+    }
+
+
     private void setMargins() {
         RelativeLayout relativeLayout = findViewById(R.id.activity_termux_root_relative_layout);
         int marginHorizontal = mProperties.getTerminalMarginHorizontal();
@@ -659,7 +710,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         } else if (getDrawer().isDrawerOpen(Gravity.LEFT)) {
             getDrawer().closeDrawers();
         } else {
-            finishActivityIfNotFinishing();
+            moveTaskToBack(true);
         }
     }
 

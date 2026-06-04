@@ -235,4 +235,9 @@
     <!-- Donate Preference -->
     <string name="donate_preference_title">Donate</string>
 
+
+    <string name="msg_switch_to_webview">Switched to WebView</string>
+    <string name="msg_switch_to_terminal">Switched to Terminal</string>
+
+
 </resources>

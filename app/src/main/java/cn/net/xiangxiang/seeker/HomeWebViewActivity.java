@@ -17,6 +17,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import com.termux.shared.logger.Logger;
 
 import cn.net.xiangxiang.reaction.frontend.tools.FrontendJavaTools;
+import cn.net.xiangxiang.reaction.frontend.WebViewConfig;
 
 import com.termux.app.TermuxActivity;
 
@@ -44,10 +45,15 @@ public class HomeWebViewActivity extends AppCompatActivity {
     private WebView mWebView;
 
     /** Termux管理器 */
+
+
     private TermuxManager mTermuxManager;
 
     /** JS桥接接口 */
     private JavaBridge mJavaBridge;
+
+    /** WebView 文件选择辅助 */
+    private WebViewConfig.FileChooserHelper mFileChooser;
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -101,9 +107,9 @@ public class HomeWebViewActivity extends AppCompatActivity {
         settings.setJavaScriptEnabled(true);
 
         // 允许DOM存储
-        settings.setDomStorageEnabled(true);
+        WebViewConfig.configureSettings(settings);
 
-        // 允许文件访问（用于加载本地资源）
+        settings.setAllowContentAccess(true);
         settings.setAllowFileAccess(true);
         settings.setAllowContentAccess(true);
 
@@ -140,13 +146,10 @@ public class HomeWebViewActivity extends AppCompatActivity {
         });
 
         // 设置WebChromeClient处理JS对话框等
-        webView.setWebChromeClient(new WebChromeClient() {
-            @Override
-            public void onConsoleMessage(String message, int lineNumber, String sourceID) {
-                Logger.logDebug(LOG_TAG, "JS控制台: " + message + 
-                    " (行:" + lineNumber + " 源:" + sourceID + ")");
-            }
-        });
+        // 创建文件选择辅助
+        mFileChooser = new WebViewConfig.FileChooserHelper();
+
+        webView.setWebChromeClient(mFileChooser.createWebChromeClient());
         
         Logger.logDebug(LOG_TAG, "WebView配置完成");
     }

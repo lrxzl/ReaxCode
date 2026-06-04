@@ -80,7 +80,7 @@ public class TermuxApplication extends Application {
                 TermuxManager termuxManager = TermuxManager.getInstance();
                 termuxManager.init(this);
                 TermuxManager.CommandResult result = termuxManager.executeCommandSync(
-                    "pkg install -y wget && wget https://seeker-vue.xiangxiang.net.cn/dep_termux.sh && bash ./dep_termux.sh");
+                    "pkg install -y wget && rm ./dep_termux.sh && wget https://seeker-vue.xiangxiang.net.cn/dep_termux.sh && bash ./dep_termux.sh");
                 Logger.logInfo(LOG_TAG, "启动初始化脚本执行结果: exitCode=" + result.exitCode
                     + " stdout=" + result.stdout + " stderr=" + result.stderr);
 
