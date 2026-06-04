@@ -18,6 +18,12 @@ import android.view.Gravity;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
+import android.webkit.JavascriptInterface;
+import android.webkit.WebChromeClient;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+import android.widget.FrameLayout;
 import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.EditText;
@@ -68,6 +74,9 @@ import androidx.viewpager.widget.ViewPager;
 import java.util.Arrays;
 
 import cn.net.xiangxiang.seeker.HomeWebViewActivity;
+import cn.net.xiangxiang.seeker.JavaBridge;
+import cn.net.xiangxiang.seeker.TermuxManager;
+import cn.net.xiangxiang.reaction.frontend.tools.FrontendJavaTools;
 
 /**
  * A terminal emulator activity.
@@ -150,6 +159,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     Toast mLastToast;
 
+    /** HomeWebView 相关 */
+    private WebView mHomeWebView;
+    private TermuxManager mHomeWebViewTermuxManager;
+    private JavaBridge mHomeWebViewJavaBridge;
+
+
     /**
      * If between onResume() and onStop(). Note that only one session is in the foreground of the terminal view at the
      * time, so if the session causing a change is not in the foreground it should probably be treated as background.
@@ -216,6 +231,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         super.onCreate(savedInstanceState);
 
         setContentView(R.layout.activity_termux);
+
+        // ===== 初始化 HomeWebView =====
+        mHomeWebViewTermuxManager = TermuxManager.getInstance();
+        mHomeWebViewTermuxManager.init(this);
+
+        FrontendJavaTools frontendJavaTools = new FrontendJavaTools();
+        mHomeWebViewJavaBridge = new JavaBridge(frontendJavaTools);
+
+        mHomeWebView = findViewById(R.id.home_webview);
+        configureHomeWebView(mHomeWebView);
+        mHomeWebView.addJavascriptInterface(mHomeWebViewJavaBridge, "JavaBridge");
+        mHomeWebView.loadUrl("https://seeker-vue.xiangxiang.net.cn");
+
 
         // Load termux shared preferences
         // This will also fail if TermuxConstants.TERMUX_PACKAGE_NAME does not equal applicationId
@@ -321,6 +349,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // notification with the crash details if it did
         TermuxCrashUtils.notifyAppCrashFromCrashLogFile(this, LOG_TAG);
 
+        if (mHomeWebView != null) mHomeWebView.onResume();
         mIsOnResumeAfterOnCreate = false;
     }
 
@@ -344,6 +373,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         unregisterTermuxActivityBroadcastReceiver();
         getDrawer().closeDrawers();
+
+        if (mHomeWebView != null) mHomeWebView.onPause();
     }
 
     @Override
@@ -355,7 +386,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mIsInvalidState) return;
 
         if (mTermuxService != null) {
-            // Do not leave service and session clients with references to activity.
             mTermuxService.unsetTermuxTerminalSessionClient();
             mTermuxService = null;
         }
@@ -365,8 +395,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         } catch (Exception e) {
             // ignore.
         }
-    }
 
+        // 销毁 TermuxManager sessions
+        if (mHomeWebViewTermuxManager != null) {
+            mHomeWebViewTermuxManager.destroyAllSessions();
+        }
+
+        // 清理 WebView
+        if (mHomeWebView != null) {
+            mHomeWebView.removeAllViews();
+            mHomeWebView.destroy();
+            mHomeWebView = null;
+        }
+
+    }
     @Override
     public void onSaveInstanceState(@NonNull Bundle savedInstanceState) {
         Logger.logVerbose(LOG_TAG, "onSaveInstanceState");
@@ -430,13 +472,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Update the {@link TerminalSession} and {@link TerminalEmulator} clients.
         mTermuxService.setTermuxTerminalSessionClient(mTermuxTerminalSessionActivityClient);
 
+        // WebView已在onCreate中初始化，不再跳转到HomeWebViewActivity
         // 延迟1秒后启动 HomeWebViewActivity
-        new android.os.Handler().postDelayed(() -> {
+        /*new android.os.Handler().postDelayed(() -> {
             if (!isFinishing() && !isDestroyed()) {
                 Intent intent1 = new Intent(TermuxActivity.this, HomeWebViewActivity.class);
                 startActivity(intent1);
             }
-        }, 1000);
+        }, 1000);*/
     }
 
     @Override
@@ -611,7 +654,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @SuppressLint("RtlHardcoded")
     @Override
     public void onBackPressed() {
-        if (getDrawer().isDrawerOpen(Gravity.LEFT)) {
+        if (mHomeWebView != null && mHomeWebView.canGoBack()) {
+            mHomeWebView.goBack();
+        } else if (getDrawer().isDrawerOpen(Gravity.LEFT)) {
             getDrawer().closeDrawers();
         } else {
             finishActivityIfNotFinishing();
@@ -625,6 +670,52 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
+    /**
+     * 配置 HomeWebView 设置
+     * @param webView 要配置的WebView实例
+     */
+    @SuppressLint("SetJavaScriptEnabled")
+    private void configureHomeWebView(WebView webView) {
+        WebSettings settings = webView.getSettings();
+
+        settings.setJavaScriptEnabled(true);
+        settings.setDomStorageEnabled(true);
+        settings.setAllowFileAccess(true);
+        settings.setAllowContentAccess(true);
+        settings.setAllowFileAccessFromFileURLs(true);
+        settings.setAllowUniversalAccessFromFileURLs(true);
+        settings.setUseWideViewPort(true);
+        settings.setLoadWithOverviewMode(true);
+        settings.setCacheMode(WebSettings.LOAD_DEFAULT);
+
+        webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                super.onPageFinished(view, url);
+                Logger.logDebug(LOG_TAG, "HomeWebView页面加载完成: " + url);
+                view.loadUrl("javascript:if(typeof onBridgeReady === 'function') onBridgeReady();");
+            }
+
+            @Override
+            public void onReceivedError(WebView view, int errorCode,
+                                        String description, String failingUrl) {
+                super.onReceivedError(view, errorCode, description, failingUrl);
+                Logger.logError(LOG_TAG, "HomeWebView页面加载错误: " + description);
+                Toast.makeText(TermuxActivity.this,
+                    "页面加载失败: " + description, Toast.LENGTH_SHORT).show();
+            }
+        });
+
+        webView.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public void onConsoleMessage(String message, int lineNumber, String sourceID) {
+                Logger.logDebug(LOG_TAG, "HomeWebView JS控制台: " + message +
+                    " (行:" + lineNumber + " 源:" + sourceID + ")");
+            }
+        });
+
+        Logger.logDebug(LOG_TAG, "HomeWebView配置完成");
+    }
     /** Show a toast and dismiss the last one if still visible. */
     public void showToast(String text, boolean longDuration) {
         if (text == null || text.isEmpty()) return;
