@@ -75,10 +75,11 @@ import androidx.viewpager.widget.ViewPager;
 
 import java.util.Arrays;
 
-import cn.net.xiangxiang.seeker.HomeWebViewActivity;
+import cn.net.xiangxiang.seeker.WebViewActivity;
 import cn.net.xiangxiang.seeker.JavaBridge;
 import cn.net.xiangxiang.seeker.TermuxManager;
 import cn.net.xiangxiang.reaction.frontend.tools.FrontendJavaTools;
+import cn.net.xiangxiang.reaction.frontend.WebViewConfig;
 
 /**
  * A terminal emulator activity.
@@ -482,11 +483,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Update the {@link TerminalSession} and {@link TerminalEmulator} clients.
         mTermuxService.setTermuxTerminalSessionClient(mTermuxTerminalSessionActivityClient);
 
-        // WebView已在onCreate中初始化，不再跳转到HomeWebViewActivity
-        // 延迟1秒后启动 HomeWebViewActivity
+        // WebView已在onCreate中初始化，不再跳转到WebViewActivity
+        // 延迟1秒后启动 WebViewActivity
         /*new android.os.Handler().postDelayed(() -> {
             if (!isFinishing() && !isDestroyed()) {
-                Intent intent1 = new Intent(TermuxActivity.this, HomeWebViewActivity.class);
+                Intent intent1 = new Intent(TermuxActivity.this, WebViewActivity.class);
                 startActivity(intent1);
             }
         }, 1000);*/
@@ -534,9 +535,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     public boolean dispatchTouchEvent(MotionEvent ev) {
         if (ev.getAction() == MotionEvent.ACTION_DOWN) {
             final long now = System.currentTimeMillis();
-            if (now - mLastTapTime < 400) {
+            if (now - mLastTapTime < 350) {
                 mTapCount++;
-                if (mTapCount == 6) {
+                if (mTapCount == 8) {
                     mTapCount = 0;
                     toggleWebViewTerminal();
                     return true;
@@ -697,9 +698,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return true;
         });
     }
-
-
-
 
 
     @SuppressLint("RtlHardcoded")

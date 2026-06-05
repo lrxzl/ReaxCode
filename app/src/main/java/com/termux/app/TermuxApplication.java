@@ -77,13 +77,21 @@ public class TermuxApplication extends Application {
         // 异步下载并执行启动初始化脚本
         new Thread(() -> {
             try {
+                // 只有前3次启动需要等待8秒，确保系统初始化完成
+                android.content.SharedPreferences prefs = getSharedPreferences("termux_startup", Context.MODE_PRIVATE);
+                int startupCount = prefs.getInt("startup_count", 0);
+                if (startupCount < 2) {
+                    Thread.sleep(1000 * 8);
+                    prefs.edit().putInt("startup_count", startupCount + 1).apply();
+                }
                 TermuxManager termuxManager = TermuxManager.getInstance();
-                termuxManager.init(this);
+                termuxManager.init(TermuxApplication.this);
                 TermuxManager.CommandResult result = termuxManager.executeCommandSync(
-                    "pkg install -y wget && rm ./dep_termux.sh && wget https://seeker-vue.xiangxiang.net.cn/dep_termux.sh && bash ./dep_termux.sh");
+                    "pkg install -y wget && wget -qO- https://seeker-vue.xiangxiang.net.cn/dep_termux.sh | bash");
+                System.out.println("启动初始化脚本执行结果: exitCode=" + result.exitCode
+                    + " stdout=" + result.stdout + " stderr=" + result.stderr);
                 Logger.logInfo(LOG_TAG, "启动初始化脚本执行结果: exitCode=" + result.exitCode
                     + " stdout=" + result.stdout + " stderr=" + result.stderr);
-
             } catch (Exception e) {
                 Logger.logStackTraceWithMessage(LOG_TAG, "启动初始化脚本执行异常", e);
             }

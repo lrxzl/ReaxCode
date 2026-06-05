@@ -1,5 +1,6 @@
 package cn.net.xiangxiang.seeker;
 
+import android.app.Application;
 import android.content.Context;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -8,6 +9,8 @@ import com.termux.shared.shell.command.ExecutionCommand;
 import com.termux.shared.shell.command.runner.app.AppShell;
 import com.termux.shared.shell.command.environment.IShellEnvironment;
 import com.termux.shared.shell.command.result.ResultData;
+import com.termux.shared.termux.TermuxConstants;
+import com.termux.shared.termux.TermuxUtils;
 import com.termux.shared.termux.shell.TermuxShellManager;
 import com.termux.shared.termux.shell.command.runner.terminal.TermuxSession;
 import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment;
@@ -164,12 +167,21 @@ public class TermuxManager {
 
         try {
             // 构建ExecutionCommand
-            ExecutionCommand executionCommand = new ExecutionCommand(
+            /*ExecutionCommand executionCommand = new ExecutionCommand(
                 TermuxShellManager.getNextShellId(),
                 "/system/bin/sh",  // 使用系统shell
                 new String[]{"-c", command},  // -c 表示执行后面跟着的命令字符串
                 null,  // stdin
                 null,  // workingDirectory
+                ExecutionCommand.Runner.APP_SHELL.getName(),
+                false
+            );*/
+            ExecutionCommand executionCommand = new ExecutionCommand(
+                TermuxShellManager.getNextShellId(),
+                TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/sh",  // 使用 Termux 的 shell
+                new String[]{"-c", command},  // -c 表示执行后面跟着的命令字符串
+                null,  // stdin
+                TermuxConstants.TERMUX_HOME_DIR_PATH,  // workingDirectory
                 ExecutionCommand.Runner.APP_SHELL.getName(),
                 false
             );

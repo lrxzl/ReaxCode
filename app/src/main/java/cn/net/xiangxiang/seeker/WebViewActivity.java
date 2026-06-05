@@ -19,7 +19,6 @@ import com.termux.shared.logger.Logger;
 import cn.net.xiangxiang.reaction.frontend.tools.FrontendJavaTools;
 import cn.net.xiangxiang.reaction.frontend.WebViewConfig;
 
-import com.termux.app.TermuxActivity;
 
 /**
  * HomeWebView活动 - 替代Termux的首页
@@ -37,9 +36,9 @@ import com.termux.app.TermuxActivity;
  * console.log(result.stdout);
  * </pre>
  */
-public class HomeWebViewActivity extends AppCompatActivity {
+public class WebViewActivity extends AppCompatActivity {
 
-    private static final String LOG_TAG = "HomeWebViewActivity";
+private static final String LOG_TAG = "WebViewActivity";
 
     /** WebView实例 */
     private WebView mWebView;
@@ -83,12 +82,11 @@ public class HomeWebViewActivity extends AppCompatActivity {
         );
         setContentView(mWebView, params);
 
-        // 加载assets中的home.html
-//        mWebView.loadUrl("file:///android_asset/dist/index.html");
+        // 优先使用 Intent 传入的 URL（如 NewWindowInterceptor 拦截的 URL），否则使用默认地址
+        final String DEFAULT_URL = "https://seeker-vue.xiangxiang.net.cn";
+        final String loadUrl = WebViewConfig.getUrlFromIntent(getIntent(), DEFAULT_URL);
         runOnUiThread(() -> {
-//            mWebView.loadUrl("file:///android_asset/home.html");
-//            mWebView.loadUrl("http://192.168.1.129:8084/");
-            mWebView.loadUrl("https://seeker-vue.xiangxiang.net.cn");
+            mWebView.loadUrl(loadUrl);
         });
         // mWebView.loadUrl("https://seeker-vue.xiangxiang.net.cn");
 //         mWebView.loadUrl("http://192.168.1.129:8084/");
@@ -125,27 +123,7 @@ public class HomeWebViewActivity extends AppCompatActivity {
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
 
         // 设置WebViewClient处理页面加载
-        webView.setWebViewClient(new WebViewClient() {
-            @Override
-            public void onPageFinished(WebView view, String url) {
-                super.onPageFinished(view, url);
-                Logger.logDebug(LOG_TAG, "页面加载完成: " + url);
-                // 页面加载完成后通知JS端
-                view.loadUrl("javascript:if(typeof onBridgeReady === 'function') onBridgeReady();");
-
-            }
-
-            @Override
-            public void onReceivedError(WebView view, int errorCode, 
-                                        String description, String failingUrl) {
-                super.onReceivedError(view, errorCode, description, failingUrl);
-                Logger.logError(LOG_TAG, "页面加载错误: " + description);
-                Toast.makeText(HomeWebViewActivity.this, 
-                    "页面加载失败: " + description, Toast.LENGTH_SHORT).show();
-            }
-        });
-
-        // 设置WebChromeClient处理JS对话框等
+        // webView.setWebViewClient(new WebViewConfig.NewWindowInterceptor());
         // 创建文件选择辅助
         mFileChooser = new WebViewConfig.FileChooserHelper();
 
