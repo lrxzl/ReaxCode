@@ -5,7 +5,6 @@ import android.view.ViewGroup;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -16,8 +15,10 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Logger;
 
 import cn.net.xiangxiang.reaction.frontend.tools.FrontendJavaTools;
@@ -30,13 +31,17 @@ public class JavaBridge {
     private final Activity activity;
     private final WebView homeWebView;
 
-    public JavaBridge() {
+    // ---- 浮动 WebView 管理（线程安全） ----
+    private static final ConcurrentHashMap<String, FloatingWebView> floatingWebViewMap = new ConcurrentHashMap<>();
+    private static final AtomicInteger floatingWebViewIdSeq = new AtomicInteger(0);
+
+/*    public JavaBridge() {
         this(null, new FrontendJavaTools(), null);
     }
 
     public JavaBridge(FrontendJavaTools tools) {
         this(null, tools, null);
-    }
+    }*/
 
     public JavaBridge(Activity activity, FrontendJavaTools tools, WebView homeWebView) {
         this.tools = tools;
@@ -44,15 +49,14 @@ public class JavaBridge {
         this.homeWebView = homeWebView;
     }
 
-    // ==================== 统一入口 ====================
+    // ==================== 同步入口（向后兼容，仅适用于快速操作） ====================
 
     @JavascriptInterface
-    public String invokeMethod(String methodName, String jsonParams) {
+    public String invokeMethod0(String methodName, String jsonParams) {
         ObjectNode response = mapper.createObjectNode();
         try {
             JsonNode argsNode = (jsonParams == null || jsonParams.isEmpty())
                 ? mapper.createArrayNode() : mapper.readTree(jsonParams);
-
             Object result = dispatch(methodName, argsNode);
             response.set("data", toJackson(result));
             log.info("[invokeMethod] " + methodName + " ok");
@@ -65,6 +69,148 @@ public class JavaBridge {
         }
         return response.toString();
     }
+
+    // ==================== 异步入口（Promise + 回调） ====================
+
+    /**
+     * 异步调用入口。JS 端通过 callNative(methodName, params) 调用，
+     * 内部会生成 callbackId 传入，Java 在子线程执行完毕后通过
+     * homeWebView.evaluateJavascript 回调 JS 端的
+     * window.__handleJavaBridgeCallback(callbackId, response)
+     */
+    @JavascriptInterface
+    public void invokeMethodAsync(String methodName, String jsonParams, String callbackId) {
+        log.info("[invokeMethodAsync] queued: " + methodName + ", callbackId=" + callbackId);
+        new Thread(() -> {
+            ObjectNode response = mapper.createObjectNode();
+            try {
+                JsonNode argsNode = (jsonParams == null || jsonParams.isEmpty())
+                    ? mapper.createArrayNode() : mapper.readTree(jsonParams);
+                Object result = dispatch(methodName, argsNode);
+                response.set("data", toJackson(result));
+                response.put("success", true);
+                log.info("[invokeMethodAsync] " + methodName + " ok");
+            } catch (Exception e) {
+                log.severe("[invokeMethodAsync] " + methodName + " error: " + e.getMessage());
+                response.putNull("data");
+                response.put("success", false);
+                response.put("error", e.getMessage() == null ? e.toString() : e.getMessage());
+                response.put("errorType", e.getClass().getSimpleName());
+                attachErrorDetails(response, e);
+            }
+            deliverCallback(callbackId, response.toString());
+        }, "JB-" + methodName).start();
+    }
+
+    /** 将结果回调到 JS 端 */
+    private void deliverCallback(String callbackId, String resultJson) {
+        if (homeWebView == null || activity == null) {
+            log.warning("[deliverCallback] homeWebView or activity is null, cannot deliver");
+            return;
+        }
+        // 用 JSON.parse 包裹，安全传递任意 JSON
+        String escaped = escapeForJsString(resultJson);
+        String js = "if(window.__handleJavaBridgeCallback){"
+            + "window.__handleJavaBridgeCallback('" + callbackId + "',JSON.parse('" + escaped + "'));"
+            + "}";
+        activity.runOnUiThread(() -> {
+            try {
+                homeWebView.evaluateJavascript(js, null);
+            } catch (Exception e) {
+                log.severe("[deliverCallback] evaluateJavascript failed: " + e.getMessage());
+            }
+        });
+    }
+
+    /** 为嵌入 JS 单引号字符串做安全转义 */
+    private String escapeForJsString(String s) {
+        if (s == null) return "";
+        return s
+            .replace("\\", "\\\\")
+            .replace("'", "\\'")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+            .replace("\u2028", "\\u2028")
+            .replace("\u2029", "\\u2029");
+    }
+
+    // ==================== 注入 JS 桥接辅助代码 ====================
+
+    /** 获取需要注入到 homeWebView 的 JS 桥接辅助代码 */
+    public static String getBridgeJsCode() {
+        return BRIDGE_JS;
+    }
+
+    /** 便捷方法：向 homeWebView 注入桥接辅助代码，需在 UI 线程调用 */
+    public void injectBridgeJs() {
+        if (homeWebView != null) {
+            homeWebView.evaluateJavascript(BRIDGE_JS, null);
+        }
+    }
+
+    private static final String BRIDGE_JS =
+        "(function(){" +
+            "if(window.__jbBridgeReady) return;" +
+            "window.__jbBridgeReady = true;" +
+            "window.__jbCallbacks = {};" +
+            "window.__jbCallbackSeq = 0;" +
+
+            "function JavaBridgeError(resp) {" +
+            "  this.name = 'JavaBridgeError';" +
+            "  this.message = resp.error || 'Unknown error';" +
+            "  this.errorType = resp.errorType;" +
+            "  this.errorDetails = resp.errorDetails;" +
+            "  this.data = resp.data;" +
+            "}" +
+            "JavaBridgeError.prototype = new Error();" +
+            "JavaBridgeError.prototype.constructor = JavaBridgeError;" +
+
+            "window.__handleJavaBridgeCallback = function(callbackId, response) {" +
+            "  var entry = window.__jbCallbacks[callbackId];" +
+            "  if (entry) {" +
+            "    delete window.__jbCallbacks[callbackId];" +
+            "    if (response.success) {" +
+            "      entry.resolve(response);" +
+            "    } else {" +
+            "      entry.reject(new JavaBridgeError(response));" +
+            "    }" +
+            "  }" +
+            "};" +
+
+            "/**" +
+            " * 异步调用 Native 方法，返回 Promise" +
+            " * @param {string} methodName 方法名" +
+            " * @param {Array}  params    参数数组" +
+            " * @param {number} [timeoutMs=30000] 超时毫秒" +
+            " * @returns {Promise<{success,data,error?,errorType?,errorDetails?}>}" +
+            " */" +
+            "window.callNative = function(methodName, params, timeoutMs) {" +
+            "  timeoutMs = timeoutMs || 30000;" +
+            "  return new Promise(function(resolve, reject) {" +
+            "    var callbackId = 'jb_' + (++window.__jbCallbackSeq) + '_' + Date.now();" +
+            "    var timer = setTimeout(function() {" +
+            "      delete window.__jbCallbacks[callbackId];" +
+            "      reject(new Error('JavaBridge timeout: ' + methodName + ' (' + timeoutMs + 'ms)'));" +
+            "    }, timeoutMs);" +
+            "    window.__jbCallbacks[callbackId] = {" +
+            "      resolve: function(r) { clearTimeout(timer); resolve(r); }," +
+            "      reject:  function(e) { clearTimeout(timer); reject(e); }" +
+            "    };" +
+            "    window.JavaBridge.invokeMethodAsync(methodName, JSON.stringify(params || []), callbackId);" +
+            "  });" +
+            "};" +
+
+            "/**" +
+            " * 异步调用并直接获取 data 字段" +
+            " * @param {string} methodName" +
+            " * @param {Array}  params" +
+            " * @param {number} [timeoutMs=30000]" +
+            " * @returns {Promise<any>}" +
+            " */" +
+            "window.callNativeData = function(methodName, params, timeoutMs) {" +
+            "  return window.callNative(methodName, params, timeoutMs).then(function(r) { return r.data; });" +
+            "};" +
+            "})();";
 
     // ==================== 方法分发 ====================
 
@@ -145,23 +291,33 @@ public class JavaBridge {
                 return insertBeforeAnchorViaExec(filePath, anchorText, newContent);
             }
 
-            // 修改 dispatch 中的 case 分支
             case "openAndroidWebView": {
-                String url = args.get(0).asText();
-                return openFloatingWebView(url);
+                // 准备废弃这个方法
             }
 
-            // 修改 dispatch 中的 case 分支
-            case "evalJavascriptOnWebView": {
+            case "openOrGetWebViewByUrl" : {
+                String url = args.get(0).asText();
+                // return openFloatingWebView(url);
+            }
+
+            case "getCurrentWebViewListInfos": {
+                // id 标题 innerText.substring(0, max200char)
+
+            }
+
+            case "runJavaScriptOnWebView": {
                 String webViewId = args.get(0).asText();
                 String script = args.get(1).asText();
                 FloatingWebView webView = floatingWebViewMap.get(webViewId);
                 if (webView == null) {
                     throw new IllegalArgumentException("WebView with id " + webViewId + " not found");
                 }
-                // 【关键改变】：这里你可以安全地使用你最开始写的那个 CountDownLatch 的 evaluateJavascriptSync 了！
-                // 因为此时 dispatch 是运行在上面的 new Thread() 子线程里的！主线程是空闲的！
+                // 异步场景下，dispatch 运行在子线程，主线程空闲，可安全使用同步 evaluate
                 return evaluateJavascriptSync(webView, script);
+            }
+
+            case "closeWebViews": {
+                // 获取id 并关闭浏览器
             }
 
             default:
@@ -169,11 +325,9 @@ public class JavaBridge {
         }
     }
 
+    // ==================== 浮动 WebView ====================
 
-    static Map<String, FloatingWebView> floatingWebViewMap = new HashMap<>();
-    static int floatingWebViewId = 0;
-
-    // openFloatingWebView 的同步等待版本
+    /** 打开浮动 WebView，同步返回其 id */
     public String openFloatingWebView(String url) {
         final String finalUrl = url;
         final String[] idHolder = new String[1];
@@ -185,7 +339,7 @@ public class JavaBridge {
                 floating.loadUrl(finalUrl);
                 ViewGroup decorView = (ViewGroup) activity.getWindow().getDecorView();
                 decorView.addView(floating);
-                String newId = String.valueOf(++ floatingWebViewId);
+                String newId = String.valueOf(floatingWebViewIdSeq.incrementAndGet());
                 floatingWebViewMap.put(newId, floating);
                 idHolder[0] = newId;
             } finally {
@@ -202,7 +356,7 @@ public class JavaBridge {
         return idHolder[0];
     }
 
-    // 同步执行 JavaScript 并获取返回值
+    /** 同步执行 JavaScript 并获取返回值（在子线程调用安全） */
     private String evaluateJavascriptSync(FloatingWebView webView, String script) throws Exception {
         final CountDownLatch latch = new CountDownLatch(1);
         final String[] resultHolder = new String[1];
@@ -210,21 +364,18 @@ public class JavaBridge {
         activity.runOnUiThread(() -> {
             webView.getWebView().evaluateJavascript(script, value -> {
                 resultHolder[0] = value;
-                latch.countDown(); // 拿到结果后解除阻塞
+                latch.countDown();
             });
         });
 
-        // 阻塞当前线程，最多等待 10 秒
         if (!latch.await(10, TimeUnit.SECONDS)) {
             throw new RuntimeException("JavaScript execution timeout after 10 seconds");
         }
         return resultHolder[0];
     }
 
-
     // ==================== 文件操作 via exec ====================
 
-    /** 执行 exec 并返回输出，options 固定为 30s 超时，最大输出 100_000 字符 */
     private String exec(String command) throws Exception {
         Map<String, Object> opts = new HashMap<>();
         opts.put("timeoutMs", 30_000);
@@ -232,7 +383,6 @@ public class JavaBridge {
         return (String) tools.exec(command, opts);
     }
 
-    /** 执行 exec 并忽略结果，用于写操作（options 固定 30s 超时） */
     private void execWrite(String command) throws Exception {
         Map<String, Object> opts = new HashMap<>();
         opts.put("timeoutMs", 30_000);
@@ -240,22 +390,18 @@ public class JavaBridge {
         tools.exec(command, opts);
     }
 
-    /** 获取文件总行数 */
     private int fileLineCount(String filePath) throws Exception {
         String out = exec("wc -l < " + shellEscapePath(filePath));
         return Integer.parseInt(out.trim());
     }
 
-    /** 对文件路径做简单的 shell 转义（用单引号包裹，内部单引号替换为 '\\\\''） */
     private String shellEscapePath(String path) {
         return "'" + path.replace("'", "'\\\\''") + "'";
     }
 
     // --- search ---
-
     private Object searchViaExec(String rootDir, String filePattern, String contentRegex, int contextLineCount) throws Exception {
         List<Map<String, Object>> results = new ArrayList<>();
-        // grep: -r 递归, -n 行号, -H 文件名（强制）, -E 扩展正则
         StringBuilder cmd = new StringBuilder("grep -rnH -E ");
         if (contextLineCount > 0) {
             cmd.append("-C ").append(contextLineCount).append(" ");
@@ -265,22 +411,16 @@ public class JavaBridge {
             cmd.append(" --include=").append(shellEscapePath(filePattern));
         }
         String out = exec(cmd.toString());
-        // 解析 grep 输出，格式: path:row:text
-        // 有 context 时，context 行格式: path-row-text 或 path:row:text（取决于 grep）
-        // busybox grep -C 输出与普通不同，这里做兼容处理
         if (out == null || out.trim().isEmpty()) return results;
 
-        // 将输出按 "\\n--\\n" 或直接按空行分组（grep -C 用 "--" 分隔匹配组）
         String[] groups = out.split("\\n--\\n|\\n--$");
         for (String group : groups) {
             if (group.trim().isEmpty()) continue;
             String[] lines = group.split("\\n");
-            // 找到匹配行（不以 "-" 开头，且格式为 path:row:text）
             int matchIdx = -1;
             for (int i = 0; i < lines.length; i++) {
                 String line = lines[i];
                 if (line.matches("^[^:]+:[0-9]+:.*")) {
-                    // 可能是匹配行
                     if (!line.contains(":")) continue;
                     int firstColon = line.indexOf(':');
                     int secondColon = line.indexOf(':', firstColon + 1);
@@ -304,7 +444,6 @@ public class JavaBridge {
                 int contextRow;
                 String text;
                 if (line.startsWith(path + "-")) {
-                    // busybox 格式: path-row-text
                     String rest = line.substring(path.length() + 1);
                     int dash = rest.indexOf('-');
                     if (dash < 0) continue;
@@ -337,14 +476,11 @@ public class JavaBridge {
     }
 
     // --- readLines ---
-
     private Object readLinesViaExec(String filePath, int startRow, int endRow) throws Exception {
         int totalLines = fileLineCount(filePath);
-        // 钳位
         int s = Math.max(1, startRow);
         int e = Math.min(totalLines, endRow);
         if (s > e) {
-            // 返回空
             Map<String, Object> rr = new HashMap<>();
             rr.put("filePath", filePath);
             rr.put("startRow", s);
@@ -355,7 +491,6 @@ public class JavaBridge {
         }
         String out = exec("sed -n '" + s + "," + e + "p' " + shellEscapePath(filePath));
         String[] lineTexts = out.split("\\n", -1);
-        // sed 输出末尾无换行时不会多出空行，需要处理
         List<Map<String, Object>> lineList = new ArrayList<>();
         for (int i = 0; i < lineTexts.length; i++) {
             Map<String, Object> nl = new HashMap<>();
@@ -373,24 +508,12 @@ public class JavaBridge {
     }
 
     // --- listFiles ---
-
-
-    // --- listFiles ---
-
     private Object listFilesViaExec(String directory, String filePattern, int maxDepth) throws Exception {
-        // 深 0 视为 1（仅当前目录）
         if (maxDepth <= 0) maxDepth = 1;
-        // 检查目录是否存在
-        String testCmd = "test -d " + shellEscapePath(directory);
-        String testOut = exec(testCmd);
-        // 若 test 失败，exec 返回非零退出码，需抛异常
-        // 实际上 exec 在非零退出码时已抛出异常，这里只做冗余检查
-
         StringBuilder cmd = new StringBuilder("find ");
         cmd.append(shellEscapePath(directory));
         cmd.append(" -maxdepth ").append(maxDepth).append(" -type f");
         if (filePattern != null && !filePattern.isEmpty()) {
-            // 使用 -regex 支持正则过滤（而非 -name 通配符）
             cmd.append(" -regex ").append(shellEscapePath(filePattern));
         }
         String out = exec(cmd.toString());
@@ -404,25 +527,17 @@ public class JavaBridge {
     }
 
     // --- replaceLines ---
-
     private Object replaceLinesViaExec(String filePath, String newContent, String startLineText, String endLineText, int startRow, int endRow) throws Exception {
-        // 1. 找到 startLineText 所在行号
         int actualStartRow = findLineByText(filePath, startLineText, startRow);
-        // 2. 找到 endLineText 所在行号
         int actualEndRow = findLineByText(filePath, endLineText, endRow);
         if (actualStartRow > actualEndRow) {
             throw new IllegalArgumentException("startRow(" + actualStartRow + ") > endRow(" + actualEndRow + ")");
         }
-        int totalLines = fileLineCount(filePath);
-        // 3. 读取旧内容
         String oldContent = exec("sed -n '" + actualStartRow + "," + actualEndRow + "p' " + shellEscapePath(filePath));
 
-        // 4. 用 sed 做替换
         if (newContent == null || newContent.isEmpty()) {
-            // 删除
             execWrite("sed -i '" + actualStartRow + "," + actualEndRow + "d' " + shellEscapePath(filePath));
         } else {
-            // 写入临时文件，然后用 sed r 命令
             String tmpFile = filePath + ".tmp";
             execWrite("printf '%s' " + shellEscapePath(newContent + "\\n") + " > " + shellEscapePath(tmpFile));
             execWrite("sed -i '" + actualStartRow + "," + actualEndRow + "d;" + actualEndRow + "r " + shellEscapePath(tmpFile) + "' " + shellEscapePath(filePath));
@@ -447,9 +562,7 @@ public class JavaBridge {
         return wr;
     }
 
-    /** 在文件中查找包含 text 的行号，以 nearRow 为参考选择最近的匹配 */
     private int findLineByText(String filePath, String text, int nearRow) throws Exception {
-        // 用 grep -n 查找所有匹配行
         String out = exec("grep -n -F " + shellEscapePath(text) + " " + shellEscapePath(filePath));
         if (out == null || out.trim().isEmpty()) {
             throw new IllegalArgumentException("Text not found: " + text);
@@ -471,7 +584,6 @@ public class JavaBridge {
     }
 
     // --- insertLines ---
-
     private Object insertLinesViaExec(String filePath, int afterRow, String newContent) throws Exception {
         int totalLines = fileLineCount(filePath);
         if (afterRow < 1) afterRow = 0;
@@ -491,10 +603,8 @@ public class JavaBridge {
             return wr;
         }
         String tmpFile = filePath + ".tmp";
-        // 将新内容写入临时文件，确保末尾有换行
         execWrite("printf '%s\\n' " + shellEscapePath(newContent) + " > " + shellEscapePath(tmpFile));
         if (afterRow == 0) {
-            // 插入到文件开头
             execWrite("cat " + shellEscapePath(tmpFile) + " " + shellEscapePath(filePath) + " > " + shellEscapePath(filePath + ".tmp2") + " && mv " + shellEscapePath(filePath + ".tmp2") + " " + shellEscapePath(filePath));
         } else {
             execWrite("sed -i '" + afterRow + "r " + shellEscapePath(tmpFile) + "' " + shellEscapePath(filePath));
@@ -519,9 +629,7 @@ public class JavaBridge {
     }
 
     // --- replaceByAnchor ---
-
     private Object replaceByAnchorViaExec(String filePath, String anchorText, int beforeCount, int afterCount, String newContent) throws Exception {
-        // 1. 找到唯一的锚点行
         int anchorRow = findUniqueLine(filePath, anchorText);
         int startRow = anchorRow - beforeCount;
         int endRow = anchorRow + afterCount;
@@ -559,20 +667,17 @@ public class JavaBridge {
     }
 
     // --- insertAfterAnchor ---
-
     private Object insertAfterAnchorViaExec(String filePath, String anchorText, String newContent) throws Exception {
         int anchorRow = findUniqueLine(filePath, anchorText);
         return insertLinesViaExec(filePath, anchorRow, newContent);
     }
 
     // --- insertBeforeAnchor ---
-
     private Object insertBeforeAnchorViaExec(String filePath, String anchorText, String newContent) throws Exception {
         int anchorRow = findUniqueLine(filePath, anchorText);
         return insertLinesViaExec(filePath, anchorRow - 1, newContent);
     }
 
-    /** 查找唯一匹配的行号，若匹配多行则抛异常 */
     private int findUniqueLine(String filePath, String text) throws Exception {
         String out = exec("grep -n -F " + shellEscapePath(text) + " " + shellEscapePath(filePath));
         if (out == null || out.trim().isEmpty()) {
@@ -641,7 +746,6 @@ public class JavaBridge {
         if (obj instanceof String || obj instanceof Number || obj instanceof Boolean) {
             return mapper.valueToTree(obj);
         }
-        // 所有 IFileContentOperator 数据类和 List 都能被 ObjectMapper 自动序列化
         return mapper.valueToTree(obj);
     }
 }

@@ -214,6 +214,8 @@
         <button class="quick-btn" onclick="test()">test</button>
         <button class="quick-btn" onclick="forward()">forward</button>
         <button class="quick-btn" onclick="testWebView()">testWebView</button>
+        <button class="quick-btn" onclick="testWebViewA()">testWebViewA</button>
+        <button class="quick-btn" onclick="testWithCallback()">testWithCallback</button>
     </div>
 
     <!-- 命令输入区域 -->
@@ -229,11 +231,42 @@
         var historyIndex = -1;
 
         function testWebView() {
-            let id = window.JavaBridge.invokeMethod('openAndroidWebView', JSON.stringify(['http://localhost:3456']))
+            let id = window.JavaBridge.invokeMethodAsync('openAndroidWebView', JSON.stringify(['http://localhost:3456']), 1)
             id = JSON.parse(id).data;
-            let result = window.JavaBridge.invokeMethod('evalJavascriptOnWebView', JSON.stringify([id + '', `1+1`]))
-            alert(result);
+            setTimeout(()=>{
+                let result = window.JavaBridge.invokeMethodAsync('evalJavascriptOnWebView', JSON.stringify([id + '', `1+1`]), 2)
+                alert(result);
+            }, 3000)
         }
+
+        // 方式 A：callNative 返回完整 response 对象
+        async function testWebViewA() {
+            try {
+                const resp1 = await callNative('openAndroidWebView', ['http://localhost:8084/#/']);
+                const webViewId = resp1.data;                      // "1"
+                console.log('WebView created, id =', webViewId);
+                alert('WebView created, id =' + webViewId);
+
+                const resp2 = await callNative('evalJavascriptOnWebView', [webViewId, 'document.body.innerText']);
+                console.log('eval result =', resp2.data);          // "2"
+                alert(resp2.data)
+            } catch (e) {
+                console.error('Error:', e.message, e.errorType);
+            }
+        }
+
+        // 方式 D：传统 .then 回调写法
+        function testWithCallback() {
+            callNative('openAndroidWebView', ['http://localhost:8084/#/', null, 2])
+                .then(function (resp) {
+                    console.log('Files:', resp.data);
+                    alert('Files:' + resp.data);
+                })
+                .catch(function (e) {
+                    console.error('Failed:', e);
+                });
+        }
+
 
         function forward() {
             location.href = prompt('https://seeker-vue.xiangxiang.net.cn', 'https://seeker-vue.xiangxiang.net.cn/')

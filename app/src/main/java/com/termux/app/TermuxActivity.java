@@ -242,13 +242,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mHomeWebViewTermuxManager.init(this);
 
         FrontendJavaTools frontendJavaTools = new FrontendJavaTools();
-        mHomeWebViewJavaBridge = new JavaBridge(this, frontendJavaTools, mHomeWebView);
+
 
         mHomeWebView = findViewById(R.id.home_webview);
         configureHomeWebView(mHomeWebView);
+
+        mHomeWebViewJavaBridge = new JavaBridge(this, frontendJavaTools, mHomeWebView);
         mHomeWebView.addJavascriptInterface(mHomeWebViewJavaBridge, "JavaBridge");
-//        mHomeWebView.loadUrl("http://192.168.1.129:8084");
-        mHomeWebView.loadUrl("file:///android_asset/home.html");
+        mHomeWebView.loadUrl("http://192.168.1.129:8084");
+//        mHomeWebView.loadUrl("file:///android_asset/home.html");
 //        mHomeWebView.loadUrl("https://seeker-vue.xiangxiang.net.cn");
 
 
@@ -745,6 +747,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 super.onPageFinished(view, url);
                 Logger.logDebug(LOG_TAG, "HomeWebView页面加载完成: " + url);
                 view.loadUrl("javascript:if(typeof onBridgeReady === 'function') onBridgeReady();");
+
+                view.evaluateJavascript(JavaBridge.getBridgeJsCode(), null);
             }
 
             @Override
