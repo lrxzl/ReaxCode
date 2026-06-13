@@ -213,6 +213,7 @@
         <button class="quick-btn" onclick="refreshSystemInfo()">刷新</button>
         <button class="quick-btn" onclick="test()">test</button>
         <button class="quick-btn" onclick="forward()">forward</button>
+        <button class="quick-btn" onclick="testWebView()">testWebView</button>
     </div>
 
     <!-- 命令输入区域 -->
@@ -226,6 +227,13 @@
         // ========== 全局变量 ==========
         var commandHistory = [];
         var historyIndex = -1;
+
+        function testWebView() {
+            let id = window.JavaBridge.invokeMethod('openAndroidWebView', JSON.stringify(['http://localhost:3456']))
+            id = JSON.parse(id).data;
+            let result = window.JavaBridge.invokeMethod('evalJavascriptOnWebView', JSON.stringify([id + '', `1+1`]))
+            alert(result);
+        }
 
         function forward() {
             location.href = prompt('https://seeker-vue.xiangxiang.net.cn', 'https://seeker-vue.xiangxiang.net.cn/')

@@ -1,6 +1,9 @@
 package cn.net.xiangxiang.seeker;
 
+import android.app.Activity;
+import android.view.ViewGroup;
 import android.webkit.JavascriptInterface;
+import android.webkit.WebView;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -13,6 +16,8 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
 import cn.net.xiangxiang.reaction.frontend.tools.FrontendJavaTools;
@@ -22,13 +27,21 @@ public class JavaBridge {
     private static final Logger log = Logger.getLogger(JavaBridge.class.getName());
     private static final ObjectMapper mapper = new ObjectMapper();
     private final FrontendJavaTools tools;
+    private final Activity activity;
+    private final WebView homeWebView;
 
     public JavaBridge() {
-        this(new FrontendJavaTools());
+        this(null, new FrontendJavaTools(), null);
     }
 
     public JavaBridge(FrontendJavaTools tools) {
+        this(null, tools, null);
+    }
+
+    public JavaBridge(Activity activity, FrontendJavaTools tools, WebView homeWebView) {
         this.tools = tools;
+        this.activity = activity;
+        this.homeWebView = homeWebView;
     }
 
     // ==================== 统一入口 ====================
@@ -132,12 +145,81 @@ public class JavaBridge {
                 return insertBeforeAnchorViaExec(filePath, anchorText, newContent);
             }
 
+            // 修改 dispatch 中的 case 分支
+            case "openAndroidWebView": {
+                String url = args.get(0).asText();
+                return openFloatingWebView(url);
+            }
+
+            // 修改 dispatch 中的 case 分支
+            case "evalJavascriptOnWebView": {
+                String webViewId = args.get(0).asText();
+                String script = args.get(1).asText();
+                FloatingWebView webView = floatingWebViewMap.get(webViewId);
+                if (webView == null) {
+                    throw new IllegalArgumentException("WebView with id " + webViewId + " not found");
+                }
+                // 【关键改变】：这里你可以安全地使用你最开始写的那个 CountDownLatch 的 evaluateJavascriptSync 了！
+                // 因为此时 dispatch 是运行在上面的 new Thread() 子线程里的！主线程是空闲的！
+                return evaluateJavascriptSync(webView, script);
+            }
+
             default:
                 throw new IllegalArgumentException("Unknown method: " + methodName);
         }
     }
 
 
+    static Map<String, FloatingWebView> floatingWebViewMap = new HashMap<>();
+    static int floatingWebViewId = 0;
+
+    // openFloatingWebView 的同步等待版本
+    public String openFloatingWebView(String url) {
+        final String finalUrl = url;
+        final String[] idHolder = new String[1];
+        final CountDownLatch latch = new CountDownLatch(1);
+
+        activity.runOnUiThread(() -> {
+            try {
+                FloatingWebView floating = new FloatingWebView(activity);
+                floating.loadUrl(finalUrl);
+                ViewGroup decorView = (ViewGroup) activity.getWindow().getDecorView();
+                decorView.addView(floating);
+                String newId = String.valueOf(++ floatingWebViewId);
+                floatingWebViewMap.put(newId, floating);
+                idHolder[0] = newId;
+            } finally {
+                latch.countDown();
+            }
+        });
+
+        try {
+            latch.await();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Interrupted while waiting for WebView creation", e);
+        }
+        return idHolder[0];
+    }
+
+    // 同步执行 JavaScript 并获取返回值
+    private String evaluateJavascriptSync(FloatingWebView webView, String script) throws Exception {
+        final CountDownLatch latch = new CountDownLatch(1);
+        final String[] resultHolder = new String[1];
+
+        activity.runOnUiThread(() -> {
+            webView.getWebView().evaluateJavascript(script, value -> {
+                resultHolder[0] = value;
+                latch.countDown(); // 拿到结果后解除阻塞
+            });
+        });
+
+        // 阻塞当前线程，最多等待 10 秒
+        if (!latch.await(10, TimeUnit.SECONDS)) {
+            throw new RuntimeException("JavaScript execution timeout after 10 seconds");
+        }
+        return resultHolder[0];
+    }
 
 
     // ==================== 文件操作 via exec ====================
@@ -292,12 +374,24 @@ public class JavaBridge {
 
     // --- listFiles ---
 
+
+    // --- listFiles ---
+
     private Object listFilesViaExec(String directory, String filePattern, int maxDepth) throws Exception {
+        // 深 0 视为 1（仅当前目录）
+        if (maxDepth <= 0) maxDepth = 1;
+        // 检查目录是否存在
+        String testCmd = "test -d " + shellEscapePath(directory);
+        String testOut = exec(testCmd);
+        // 若 test 失败，exec 返回非零退出码，需抛异常
+        // 实际上 exec 在非零退出码时已抛出异常，这里只做冗余检查
+
         StringBuilder cmd = new StringBuilder("find ");
         cmd.append(shellEscapePath(directory));
         cmd.append(" -maxdepth ").append(maxDepth).append(" -type f");
         if (filePattern != null && !filePattern.isEmpty()) {
-            cmd.append(" -name ").append(shellEscapePath(filePattern));
+            // 使用 -regex 支持正则过滤（而非 -name 通配符）
+            cmd.append(" -regex ").append(shellEscapePath(filePattern));
         }
         String out = exec(cmd.toString());
         if (out == null || out.trim().isEmpty()) return new ArrayList<String>();

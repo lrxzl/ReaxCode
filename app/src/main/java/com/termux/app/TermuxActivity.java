@@ -242,12 +242,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mHomeWebViewTermuxManager.init(this);
 
         FrontendJavaTools frontendJavaTools = new FrontendJavaTools();
-        mHomeWebViewJavaBridge = new JavaBridge(frontendJavaTools);
+        mHomeWebViewJavaBridge = new JavaBridge(this, frontendJavaTools, mHomeWebView);
 
         mHomeWebView = findViewById(R.id.home_webview);
         configureHomeWebView(mHomeWebView);
         mHomeWebView.addJavascriptInterface(mHomeWebViewJavaBridge, "JavaBridge");
-        mHomeWebView.loadUrl("https://seeker-vue.xiangxiang.net.cn");
+//        mHomeWebView.loadUrl("http://192.168.1.129:8084");
+        mHomeWebView.loadUrl("file:///android_asset/home.html");
+//        mHomeWebView.loadUrl("https://seeker-vue.xiangxiang.net.cn");
 
 
         // 根据 mStartWithWebView 控制 WebView 可见性

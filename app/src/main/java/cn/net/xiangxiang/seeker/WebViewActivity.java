@@ -67,7 +67,7 @@ private static final String LOG_TAG = "WebViewActivity";
         FrontendJavaTools frontendJavaTools = new FrontendJavaTools();
 
         // 初始化JavaBridge
-        mJavaBridge = new JavaBridge(frontendJavaTools);
+        mJavaBridge = new JavaBridge(this, frontendJavaTools, null);
 
         // 创建WebView并设置ContentView
         mWebView = new WebView(this);
