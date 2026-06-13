@@ -13,9 +13,9 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -31,17 +31,24 @@ public class JavaBridge {
     private final Activity activity;
     private final WebView homeWebView;
 
-    // ---- 浮动 WebView 管理（线程安全） ----
-    private static final ConcurrentHashMap<String, FloatingWebView> floatingWebViewMap = new ConcurrentHashMap<>();
-    private static final AtomicInteger floatingWebViewIdSeq = new AtomicInteger(0);
 
-/*    public JavaBridge() {
-        this(null, new FrontendJavaTools(), null);
+    /** 浮动 WebView 条目，包含 WebView 实例和 URL */
+    private static class WebViewEntry {
+        final FloatingWebView floatingWebView;
+        final String url;
+        WebViewEntry(FloatingWebView floatingWebView, String url) {
+            this.floatingWebView = floatingWebView;
+            this.url = url;
+        }
     }
 
-    public JavaBridge(FrontendJavaTools tools) {
-        this(null, tools, null);
-    }*/
+    /**
+     * LinkedHashMap 保持插入顺序：
+     * - 第一个 entry 就是最老的（最先被淘汰）
+     * - 最后一个 entry 就是最新的
+     * 所有读写均通过 synchronized(floatingWebViewMap) 保护线程安全
+     */
+    private final LinkedHashMap<String, WebViewEntry> floatingWebViewMap = new LinkedHashMap<>();
 
     public JavaBridge(Activity activity, FrontendJavaTools tools, WebView homeWebView) {
         this.tools = tools;
@@ -52,7 +59,7 @@ public class JavaBridge {
     // ==================== 同步入口（向后兼容，仅适用于快速操作） ====================
 
     @JavascriptInterface
-    public String invokeMethod0(String methodName, String jsonParams) {
+    public String invokeMethod(String methodName, String jsonParams) {
         ObjectNode response = mapper.createObjectNode();
         try {
             JsonNode argsNode = (jsonParams == null || jsonParams.isEmpty())
@@ -72,12 +79,6 @@ public class JavaBridge {
 
     // ==================== 异步入口（Promise + 回调） ====================
 
-    /**
-     * 异步调用入口。JS 端通过 callNative(methodName, params) 调用，
-     * 内部会生成 callbackId 传入，Java 在子线程执行完毕后通过
-     * homeWebView.evaluateJavascript 回调 JS 端的
-     * window.__handleJavaBridgeCallback(callbackId, response)
-     */
     @JavascriptInterface
     public void invokeMethodAsync(String methodName, String jsonParams, String callbackId) {
         log.info("[invokeMethodAsync] queued: " + methodName + ", callbackId=" + callbackId);
@@ -108,7 +109,6 @@ public class JavaBridge {
             log.warning("[deliverCallback] homeWebView or activity is null, cannot deliver");
             return;
         }
-        // 用 JSON.parse 包裹，安全传递任意 JSON
         String escaped = escapeForJsString(resultJson);
         String js = "if(window.__handleJavaBridgeCallback){"
             + "window.__handleJavaBridgeCallback('" + callbackId + "',JSON.parse('" + escaped + "'));"
@@ -122,7 +122,6 @@ public class JavaBridge {
         });
     }
 
-    /** 为嵌入 JS 单引号字符串做安全转义 */
     private String escapeForJsString(String s) {
         if (s == null) return "";
         return s
@@ -136,81 +135,16 @@ public class JavaBridge {
 
     // ==================== 注入 JS 桥接辅助代码 ====================
 
-    /** 获取需要注入到 homeWebView 的 JS 桥接辅助代码 */
     public static String getBridgeJsCode() {
-        return BRIDGE_JS;
+        return JavaBridgeConstants.BRIDGE_JS;
     }
 
-    /** 便捷方法：向 homeWebView 注入桥接辅助代码，需在 UI 线程调用 */
     public void injectBridgeJs() {
         if (homeWebView != null) {
-            homeWebView.evaluateJavascript(BRIDGE_JS, null);
+            homeWebView.evaluateJavascript(JavaBridgeConstants.BRIDGE_JS, null);
         }
     }
 
-    private static final String BRIDGE_JS =
-        "(function(){" +
-            "if(window.__jbBridgeReady) return;" +
-            "window.__jbBridgeReady = true;" +
-            "window.__jbCallbacks = {};" +
-            "window.__jbCallbackSeq = 0;" +
-
-            "function JavaBridgeError(resp) {" +
-            "  this.name = 'JavaBridgeError';" +
-            "  this.message = resp.error || 'Unknown error';" +
-            "  this.errorType = resp.errorType;" +
-            "  this.errorDetails = resp.errorDetails;" +
-            "  this.data = resp.data;" +
-            "}" +
-            "JavaBridgeError.prototype = new Error();" +
-            "JavaBridgeError.prototype.constructor = JavaBridgeError;" +
-
-            "window.__handleJavaBridgeCallback = function(callbackId, response) {" +
-            "  var entry = window.__jbCallbacks[callbackId];" +
-            "  if (entry) {" +
-            "    delete window.__jbCallbacks[callbackId];" +
-            "    if (response.success) {" +
-            "      entry.resolve(response);" +
-            "    } else {" +
-            "      entry.reject(new JavaBridgeError(response));" +
-            "    }" +
-            "  }" +
-            "};" +
-
-            "/**" +
-            " * 异步调用 Native 方法，返回 Promise" +
-            " * @param {string} methodName 方法名" +
-            " * @param {Array}  params    参数数组" +
-            " * @param {number} [timeoutMs=30000] 超时毫秒" +
-            " * @returns {Promise<{success,data,error?,errorType?,errorDetails?}>}" +
-            " */" +
-            "window.callNative = function(methodName, params, timeoutMs) {" +
-            "  timeoutMs = timeoutMs || 30000;" +
-            "  return new Promise(function(resolve, reject) {" +
-            "    var callbackId = 'jb_' + (++window.__jbCallbackSeq) + '_' + Date.now();" +
-            "    var timer = setTimeout(function() {" +
-            "      delete window.__jbCallbacks[callbackId];" +
-            "      reject(new Error('JavaBridge timeout: ' + methodName + ' (' + timeoutMs + 'ms)'));" +
-            "    }, timeoutMs);" +
-            "    window.__jbCallbacks[callbackId] = {" +
-            "      resolve: function(r) { clearTimeout(timer); resolve(r); }," +
-            "      reject:  function(e) { clearTimeout(timer); reject(e); }" +
-            "    };" +
-            "    window.JavaBridge.invokeMethodAsync(methodName, JSON.stringify(params || []), callbackId);" +
-            "  });" +
-            "};" +
-
-            "/**" +
-            " * 异步调用并直接获取 data 字段" +
-            " * @param {string} methodName" +
-            " * @param {Array}  params" +
-            " * @param {number} [timeoutMs=30000]" +
-            " * @returns {Promise<any>}" +
-            " */" +
-            "window.callNativeData = function(methodName, params, timeoutMs) {" +
-            "  return window.callNative(methodName, params, timeoutMs).then(function(r) { return r.data; });" +
-            "};" +
-            "})();";
 
     // ==================== 方法分发 ====================
 
@@ -291,33 +225,46 @@ public class JavaBridge {
                 return insertBeforeAnchorViaExec(filePath, anchorText, newContent);
             }
 
-            case "openAndroidWebView": {
-                // 准备废弃这个方法
-            }
-
-            case "openOrGetWebViewByUrl" : {
+            case "openOrGetWebViewByUrl": {
                 String url = args.get(0).asText();
-                // return openFloatingWebView(url);
+                return openOrGetWebViewByUrl(url);
             }
 
             case "getCurrentWebViewListInfos": {
-                // id 标题 innerText.substring(0, max200char)
-
+                return getCurrentWebViewListInfos();
             }
 
             case "runJavaScriptOnWebView": {
                 String webViewId = args.get(0).asText();
                 String script = args.get(1).asText();
-                FloatingWebView webView = floatingWebViewMap.get(webViewId);
-                if (webView == null) {
-                    throw new IllegalArgumentException("WebView with id " + webViewId + " not found");
+                FloatingWebView webView;
+                synchronized (floatingWebViewMap) {
+                    WebViewEntry entry = floatingWebViewMap.get(webViewId);
+                    if (entry == null) {
+                        throw new IllegalArgumentException("WebView with id " + webViewId + " not found");
+                    }
+                    webView = entry.floatingWebView;
                 }
-                // 异步场景下，dispatch 运行在子线程，主线程空闲，可安全使用同步 evaluate
                 return evaluateJavascriptSync(webView, script);
             }
 
             case "closeWebViews": {
-                // 获取id 并关闭浏览器
+                JsonNode idNode = args.get(0);
+                if (idNode.isArray()) {
+                    for (JsonNode n : idNode) {
+                        closeWebView(n.asText());
+                    }
+                } else {
+                    String id = idNode.asText();
+                    if ("all".equalsIgnoreCase(id)) {
+                        closeAllWebViews();
+                    } else {
+                        closeWebView(id);
+                    }
+                }
+                Map<String, Object> result = new HashMap<>();
+                result.put("closed", true);
+                return result;
             }
 
             default:
@@ -325,7 +272,38 @@ public class JavaBridge {
         }
     }
 
-    // ==================== 浮动 WebView ====================
+    // ==================== 浮动 WebView 管理 ====================
+
+    /**
+     * 打开或获取已有 WebView：
+     * 1. 若 URL 已有对应 WebView，直接返回其 id
+     * 2. 若达到 MAX_WEB_VIEW_COUNT 上限，自动关闭最老的（LinkedHashMap 第一个 entry）
+     * 3. 创建新的浮动 WebView 并返回 id
+     */
+    public String openOrGetWebViewByUrl(String url) throws Exception {
+        synchronized (floatingWebViewMap) {
+            // 1. 查找是否已有相同 URL 的 WebView
+            for (Map.Entry<String, WebViewEntry> entry : floatingWebViewMap.entrySet()) {
+                if (url.equals(entry.getValue().url)) {
+                    String existId = entry.getKey();
+                    log.info("[openOrGetWebViewByUrl] Found existing WebView: id=" + existId + ", url=" + url);
+                    return existId;
+                }
+            }
+
+            // 2. 超过上限则关闭最老的 — LinkedHashMap 第一个 entry 就是最老的
+            while (floatingWebViewMap.size() >= JavaBridgeConstants.MAX_WEB_VIEW_COUNT) {
+                String oldestId = floatingWebViewMap.keySet().iterator().next();
+                log.info("[openOrGetWebViewByUrl] Max count reached, closing oldest: id=" + oldestId);
+                closeWebViewInternal(oldestId);
+            }
+        }
+
+        // 3. 创建新的浮动 WebView
+        String newId = openFloatingWebView(url);
+        log.info("[openOrGetWebViewByUrl] Created new WebView: id=" + newId + ", url=" + url);
+        return newId;
+    }
 
     /** 打开浮动 WebView，同步返回其 id */
     public String openFloatingWebView(String url) {
@@ -339,8 +317,10 @@ public class JavaBridge {
                 floating.loadUrl(finalUrl);
                 ViewGroup decorView = (ViewGroup) activity.getWindow().getDecorView();
                 decorView.addView(floating);
-                String newId = String.valueOf(floatingWebViewIdSeq.incrementAndGet());
-                floatingWebViewMap.put(newId, floating);
+                String newId = String.valueOf(JavaBridgeConstants.floatingWebViewIdSeq.incrementAndGet());
+                synchronized (floatingWebViewMap) {
+                    floatingWebViewMap.put(newId, new WebViewEntry(floating, finalUrl));
+                }
                 idHolder[0] = newId;
             } finally {
                 latch.countDown();
@@ -354,6 +334,119 @@ public class JavaBridge {
             throw new RuntimeException("Interrupted while waiting for WebView creation", e);
         }
         return idHolder[0];
+    }
+
+    /**
+     * 获取所有浮动 WebView 的信息列表
+     * 每项包含：id、url、title、innerText（截取前 200 字符）
+     */
+    public List<Map<String, Object>> getCurrentWebViewListInfos() throws Exception {
+        List<Map.Entry<String, WebViewEntry>> snapshot;
+        synchronized (floatingWebViewMap) {
+            snapshot = new ArrayList<>(floatingWebViewMap.entrySet());
+        }
+
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Map.Entry<String, WebViewEntry> mapEntry : snapshot) {
+            String id = mapEntry.getKey();
+            WebViewEntry wvEntry = mapEntry.getValue();
+
+            Map<String, Object> info = new HashMap<>();
+            info.put("id", id);
+            info.put("url", wvEntry.url);
+
+            // 在 UI 线程获取 title
+            final String[] titleHolder = new String[1];
+            final CountDownLatch infoLatch = new CountDownLatch(1);
+            activity.runOnUiThread(() -> {
+                try {
+                    titleHolder[0] = wvEntry.floatingWebView.getWebView().getTitle();
+                } finally {
+                    infoLatch.countDown();
+                }
+            });
+            infoLatch.await(5, TimeUnit.SECONDS);
+            info.put("title", titleHolder[0] != null ? titleHolder[0] : "");
+
+            // 通过 JS 获取 innerText（截取前 200 字符避免大字符串传输）
+            String rawInnerText = evaluateJavascriptSync(wvEntry.floatingWebView,
+                "(function(){" +
+                    "  try {" +
+                    "    var t = document.body ? document.body.innerText : '';" +
+                    "    return t.substring(0, 200);" +
+                    "  } catch(e) { return ''; }" +
+                    "})()");
+
+            String innerText = "";
+            if (rawInnerText != null && !"null".equals(rawInnerText)) {
+                try {
+                    innerText = mapper.readValue(rawInnerText, String.class);
+                } catch (Exception e) {
+                    innerText = rawInnerText;
+                    if (innerText.startsWith("\"") && innerText.endsWith("\"") && innerText.length() >= 2) {
+                        innerText = innerText.substring(1, innerText.length() - 1)
+                            .replace("\\n", "\n")
+                            .replace("\\t", "\t")
+                            .replace("\\\"", "\"");
+                    }
+                }
+            }
+            info.put("innerText", innerText != null ? innerText : "");
+
+            result.add(info);
+        }
+        return result;
+    }
+
+    /** 关闭指定 id 的浮动 WebView（对外，含 UI 线程销毁） */
+    private void closeWebView(String id) {
+        closeWebViewInternal(id);
+    }
+
+
+    /**
+     * 关闭指定 id 的浮动 WebView
+     * 注意：如果调用方已持有 floatingWebViewMap 锁，此方法不会再加锁（避免死锁）
+     *      由 openOrGetWebViewByUrl 内部调用时属于此场景
+     */
+    private void closeWebViewInternal(String id) {
+        WebViewEntry entry;
+        synchronized (floatingWebViewMap) {
+            entry = floatingWebViewMap.remove(id);
+        }
+        destroyWebViewEntry(id, entry);
+    }
+
+    /** 关闭所有浮动 WebView */
+    private void closeAllWebViews() {
+        List<Map.Entry<String, WebViewEntry>> snapshot;
+        synchronized (floatingWebViewMap) {
+            snapshot = new ArrayList<>(floatingWebViewMap.entrySet());
+            floatingWebViewMap.clear();
+        }
+        for (Map.Entry<String, WebViewEntry> mapEntry : snapshot) {
+            destroyWebViewEntry(mapEntry.getKey(), mapEntry.getValue());
+        }
+        log.info("[closeAllWebViews] All WebViews closed, count=" + snapshot.size());
+    }
+
+    /** 从视图树移除并销毁 WebView */
+    private void destroyWebViewEntry(String id, WebViewEntry entry) {
+        if (entry != null && activity != null) {
+            FloatingWebView floating = entry.floatingWebView;
+            activity.runOnUiThread(() -> {
+                try {
+                    ViewGroup parent = (ViewGroup) floating.getParent();
+                    if (parent != null) {
+                        parent.removeView(floating);
+                    }
+                    floating.getWebView().destroy();
+                } catch (Exception e) {
+                    log.warning("[destroyWebViewEntry] Error destroying WebView id=" + id + ": " + e.getMessage());
+                }
+            });
+        }
+        log.info("[closeWebView] Closed WebView id=" + id);
     }
 
     /** 同步执行 JavaScript 并获取返回值（在子线程调用安全） */
