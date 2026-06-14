@@ -170,11 +170,19 @@ private static final String LOG_TAG = "WebViewActivity";
 
     @Override
     public void onBackPressed() {
-        // 如果WebView可以回退，则回退页面，否则退出Activity
+        //如果WebView可以回退，则回退页面，否则退出Activity
         if (mWebView != null && mWebView.canGoBack()) {
             mWebView.goBack();
         } else {
             super.onBackPressed();
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (mFileChooser != null) {
+            mFileChooser.onActivityResult(requestCode, resultCode, data);
         }
     }
 }

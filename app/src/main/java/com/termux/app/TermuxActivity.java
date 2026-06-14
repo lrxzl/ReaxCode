@@ -169,6 +169,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean mStartWithWebView = true;
     private TermuxManager mHomeWebViewTermuxManager;
     private JavaBridge mHomeWebViewJavaBridge;
+    private WebViewConfig.FileChooserHelper mHomeFileChooser;
 
     /**
      * If between onResume() and onStop(). Note that only one session is in the foreground of the terminal view at the
@@ -761,13 +762,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         });
 
-        webView.setWebChromeClient(new WebChromeClient() {
-            @Override
-            public void onConsoleMessage(String message, int lineNumber, String sourceID) {
-                Logger.logDebug(LOG_TAG, "HomeWebView JS控制台: " + message +
-                    " (行:" + lineNumber + " 源:" + sourceID + ")");
-            }
-        });
+        mHomeFileChooser = new WebViewConfig.FileChooserHelper();
+        webView.setWebChromeClient(mHomeFileChooser.createWebChromeClient());
 
         Logger.logDebug(LOG_TAG, "HomeWebView配置完成");
     }
@@ -948,7 +944,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        Logger.logVerbose(LOG_TAG, "onActivityResult: requestCode: " + requestCode + ", resultCode: "  + resultCode + ", data: "  + IntentUtils.getIntentString(data));
+        Logger.logVerbose(LOG_TAG, "onActivityResult: requestCode: " + requestCode + ", resultCode: "  + resultCode + ", data: " + IntentUtils.getIntentString(data));
+        if (mHomeFileChooser != null && mHomeFileChooser.onActivityResult(requestCode, resultCode, data)) return;
         if (requestCode == PermissionUtils.REQUEST_GRANT_STORAGE_PERMISSION) {
             requestStoragePermission(true);
         }
