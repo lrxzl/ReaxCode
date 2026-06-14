@@ -1,10 +1,19 @@
 package cn.net.xiangxiang.seeker;
 
 import android.app.Activity;
+import android.content.Intent;
+import android.database.Cursor;
+import android.net.Uri;
+import android.provider.MediaStore;
 import android.view.ViewGroup;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -28,9 +37,12 @@ import cn.net.xiangxiang.reaction.frontend.tools.file.IFileContentOperator;
 public class JavaBridge {
     private static final Logger log = Logger.getLogger(JavaBridge.class.getName());
     private static final ObjectMapper mapper = new ObjectMapper();
+    public static final int FILE_CHOOSER_REQUEST_CODE_JBRIDGE = 10011;
     private final FrontendJavaTools tools;
     private final Activity activity;
     private final WebView homeWebView;
+    private volatile CountDownLatch fileChooserLatch;
+    private volatile Uri fileChooserResultUri;
 
 
     /** 浮动 WebView 条目，包含 WebView 实例和 URL */
@@ -276,6 +288,11 @@ public class JavaBridge {
                 return result;
             }
 
+            case "openFileChooser": {
+                String acceptType = optNullableText(args, 0);
+                return openFileChooserInternal(acceptType);
+            }
+
             default:
                 throw new IllegalArgumentException("Unknown method: " + methodName);
         }
@@ -513,6 +530,100 @@ public class JavaBridge {
         opts.put("timeoutMs", 30_000);
         opts.put("maxResultChars", 1_000);
         tools.exec(command, opts);
+    }
+
+    // ==================== 文件选择器 ====================
+
+    private Object openFileChooserInternal(String acceptType) throws Exception {
+        fileChooserLatch = new CountDownLatch(1);
+        fileChooserResultUri = null;
+
+        activity.runOnUiThread(() -> {
+            Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+            intent.addCategory(Intent.CATEGORY_OPENABLE);
+            intent.setType(acceptType != null && !acceptType.isEmpty() ? acceptType : "*/*");
+
+            try {
+                activity.startActivityForResult(
+                    Intent.createChooser(intent, "选择文件"),
+                    FILE_CHOOSER_REQUEST_CODE_JBRIDGE);
+            } catch (Exception e) {
+                log.severe("[openFileChooser] Failed to start file chooser: " + e.getMessage());
+                fileChooserLatch.countDown();
+            }
+        });
+
+        if (!fileChooserLatch.await(120, TimeUnit.SECONDS)) {
+            throw new RuntimeException("File chooser timeout");
+        }
+
+        if (fileChooserResultUri == null) {
+            return null;
+        }
+
+        return getPathFromUri(fileChooserResultUri);
+    }
+
+    public void onFileChooserResult(int resultCode, Intent data) {
+        if (resultCode == Activity.RESULT_OK && data != null) {
+            Uri resultUri = data.getData();
+            if (resultUri != null) {
+                fileChooserResultUri = resultUri;
+            }
+
+            android.content.ClipData clipData = data.getClipData();
+            if (clipData != null && clipData.getItemCount() > 0) {
+                fileChooserResultUri = clipData.getItemAt(0).getUri();
+            }
+        }
+        if (fileChooserLatch != null) {
+            fileChooserLatch.countDown();
+        }
+    }
+
+    private String getPathFromUri(Uri uri) {
+        if (uri == null) return null;
+
+        if ("file".equals(uri.getScheme())) {
+            return uri.getPath();
+        }
+
+        try {
+            String[] projection = {MediaStore.Images.Media.DATA};
+            Cursor cursor = activity.getContentResolver().query(uri, projection, null, null, null);
+            if (cursor != null) {
+                try {
+                    if (cursor.moveToFirst()) {
+                        int columnIndex = cursor.getColumnIndexOrThrow(projection[0]);
+                        String path = cursor.getString(columnIndex);
+                        if (path != null) return path;
+                    }
+                } finally {
+                    cursor.close();
+                }
+            }
+        } catch (Exception e) {
+            // Fall through
+        }
+
+        try {
+            File tempDir = new File(activity.getCacheDir(), "file_chooser");
+            if (!tempDir.exists()) tempDir.mkdirs();
+            File tempFile = new File(tempDir, "file_" + System.currentTimeMillis());
+
+            try (InputStream is = activity.getContentResolver().openInputStream(uri);
+                 OutputStream os = new FileOutputStream(tempFile)) {
+                if (is == null) return uri.toString();
+                byte[] buffer = new byte[4096];
+                int read;
+                while ((read = is.read(buffer)) != -1) {
+                    os.write(buffer, 0, read);
+                }
+            }
+            return tempFile.getAbsolutePath();
+        } catch (Exception e) {
+            return uri.toString();
+        }
     }
 
     private int fileLineCount(String filePath) throws Exception {

@@ -945,6 +945,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         Logger.logVerbose(LOG_TAG, "onActivityResult: requestCode: " + requestCode + ", resultCode: "  + resultCode + ", data: " + IntentUtils.getIntentString(data));
+        if (requestCode == JavaBridge.FILE_CHOOSER_REQUEST_CODE_JBRIDGE) {
+            if (mHomeWebViewJavaBridge != null) {
+                mHomeWebViewJavaBridge.onFileChooserResult(resultCode, data);
+            }
+            return;
+        }
         if (mHomeFileChooser != null && mHomeFileChooser.onActivityResult(requestCode, resultCode, data)) return;
         if (requestCode == PermissionUtils.REQUEST_GRANT_STORAGE_PERMISSION) {
             requestStoragePermission(true);
