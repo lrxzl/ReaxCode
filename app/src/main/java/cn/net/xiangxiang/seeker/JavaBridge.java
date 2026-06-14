@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.view.ViewGroup;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
+import android.webkit.WebViewClient;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -54,6 +55,14 @@ public class JavaBridge {
         this.tools = tools;
         this.activity = activity;
         this.homeWebView = homeWebView;
+    }
+
+    // ==================== 简单接口（无需回调） ====================
+
+    @JavascriptInterface
+    public void openWebView(String url) {
+        log.info("[openWebView] url=" + url);
+        openFloatingWebView(url);
     }
 
     // ==================== 同步入口（向后兼容，仅适用于快速操作） ====================
@@ -283,13 +292,13 @@ public class JavaBridge {
     public String openOrGetWebViewByUrl(String url) throws Exception {
         synchronized (floatingWebViewMap) {
             // 1. 查找是否已有相同 URL 的 WebView
-            for (Map.Entry<String, WebViewEntry> entry : floatingWebViewMap.entrySet()) {
+            /*for (Map.Entry<String, WebViewEntry> entry : floatingWebViewMap.entrySet()) {
                 if (url.equals(entry.getValue().url)) {
                     String existId = entry.getKey();
                     log.info("[openOrGetWebViewByUrl] Found existing WebView: id=" + existId + ", url=" + url);
                     return existId;
                 }
-            }
+            }*/
 
             // 2. 超过上限则关闭最老的 — LinkedHashMap 第一个 entry 就是最老的
             while (floatingWebViewMap.size() >= JavaBridgeConstants.MAX_WEB_VIEW_COUNT) {
@@ -315,6 +324,13 @@ public class JavaBridge {
             try {
                 FloatingWebView floating = new FloatingWebView(activity);
                 floating.setOnCloseListener(this::removeFromMap);
+                floating.getWebView().addJavascriptInterface(JavaBridge.this, "SubWebViewBridge");
+                floating.getWebView().setWebViewClient(new WebViewClient() {
+                    @Override
+                    public void onPageFinished(WebView view, String url) {
+                        view.evaluateJavascript(JavaBridgeConstants.BRIDGE_JS, null);
+                    }
+                });
                 floating.loadUrl(finalUrl);
                 ViewGroup decorView = (ViewGroup) activity.getWindow().getDecorView();
                 decorView.addView(floating);
