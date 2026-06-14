@@ -314,6 +314,7 @@ public class JavaBridge {
         activity.runOnUiThread(() -> {
             try {
                 FloatingWebView floating = new FloatingWebView(activity);
+                floating.setOnCloseListener(this::removeFromMap);
                 floating.loadUrl(finalUrl);
                 ViewGroup decorView = (ViewGroup) activity.getWindow().getDecorView();
                 decorView.addView(floating);
@@ -396,6 +397,21 @@ public class JavaBridge {
             result.add(info);
         }
         return result;
+    }
+
+    /** 从 map 中移除指定的 FloatingWebView（当 WebView 主动关闭时调用） */
+    private void removeFromMap(FloatingWebView webView) {
+        synchronized (floatingWebViewMap) {
+            Iterator<Map.Entry<String, WebViewEntry>> iterator = floatingWebViewMap.entrySet().iterator();
+            while (iterator.hasNext()) {
+                Map.Entry<String, WebViewEntry> entry = iterator.next();
+                if (entry.getValue().floatingWebView == webView) {
+                    iterator.remove();
+                    log.info("[removeFromMap] Removed WebView id=" + entry.getKey());
+                    break;
+                }
+            }
+        }
     }
 
     /** 关闭指定 id 的浮动 WebView（对外，含 UI 线程销毁） */

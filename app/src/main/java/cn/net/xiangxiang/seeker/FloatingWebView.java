@@ -21,10 +21,15 @@ import android.widget.TextView;
 
 public class FloatingWebView extends FrameLayout {
 
-    private static final float MIN_WIDTH_DP = 250f;
-    private static final float MIN_HEIGHT_DP = 180f;
-    private static final float DEFAULT_WIDTH_DP = 320f;
-    private static final float DEFAULT_HEIGHT_DP = 240f;
+    public interface OnCloseListener {
+        void onClosed(FloatingWebView webView);
+    }
+
+    private OnCloseListener onCloseListener;
+    private static final float MIN_WIDTH_DP = 200f;
+    private static final float MIN_HEIGHT_DP = 120f;
+    private static final float DEFAULT_WIDTH_DP = 240f;
+    private static final float DEFAULT_HEIGHT_DP = 400f;
     private static final float TITLE_BAR_HEIGHT_DP = 40f;
     private static final float MIN_VISIBLE_DP = 48f;
 
@@ -55,6 +60,10 @@ public class FloatingWebView extends FrameLayout {
 
     public WebView getWebView() {
         return webView;
+    }
+
+    public void setOnCloseListener(OnCloseListener listener) {
+        this.onCloseListener = listener;
     }
 
     @SuppressLint({"SetJavaScriptEnabled", "ClickableViewAccessibility"})
@@ -282,6 +291,9 @@ public class FloatingWebView extends FrameLayout {
     }
 
     private void close() {
+        if (onCloseListener != null) {
+            onCloseListener.onClosed(this);
+        }
         ViewGroup parent = (ViewGroup) getParent();
         if (parent != null) {
             parent.removeView(this);
