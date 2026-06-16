@@ -609,7 +609,9 @@ public class JavaBridge {
         try {
             File tempDir = new File(activity.getCacheDir(), "file_chooser");
             if (!tempDir.exists()) tempDir.mkdirs();
-            File tempFile = new File(tempDir, "file_" + System.currentTimeMillis());
+
+            String ext = getExtFromUri(uri);
+            File tempFile = new File(tempDir, "selected" + ext);
 
             try (InputStream is = activity.getContentResolver().openInputStream(uri);
                  OutputStream os = new FileOutputStream(tempFile)) {
@@ -624,6 +626,14 @@ public class JavaBridge {
         } catch (Exception e) {
             return uri.toString();
         }
+    }
+
+    private String getExtFromUri(Uri uri) {
+        String lastPath = uri.getLastPathSegment();
+        if (lastPath != null && lastPath.contains(".")) {
+            return lastPath.substring(lastPath.lastIndexOf("."));
+        }
+        return "";
     }
 
     private int fileLineCount(String filePath) throws Exception {
