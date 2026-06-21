@@ -77,7 +77,7 @@ public class TermuxApplication extends Application {
         // 异步下载并执行启动初始化脚本
         new Thread(() -> {
             try {
-                // 只有前3次启动需要等待8秒，确保系统初始化完成
+                // 只有前2次启动需要等待8秒，确保系统初始化完成
                 android.content.SharedPreferences prefs = getSharedPreferences("termux_startup", Context.MODE_PRIVATE);
                 int startupCount = prefs.getInt("startup_count", 0);
                 if (startupCount < 2) {
