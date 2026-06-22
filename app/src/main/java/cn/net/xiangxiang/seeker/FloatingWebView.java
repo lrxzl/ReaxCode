@@ -24,6 +24,8 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import java.util.Random;
+
 public class FloatingWebView extends FrameLayout {
 
     public interface OnCloseListener {
@@ -262,7 +264,10 @@ public class FloatingWebView extends FrameLayout {
         int defH = dpToPx(DEFAULT_HEIGHT_DP);
         int centerX = (screenWidth - defW) / 2;
         int centerY = (screenHeight - defH) / 2;
-        setSizeAndPosition(defW, defH, centerX, centerY);
+        Random random = new Random();
+        int offsetX = (random.nextInt(51) + 50) * (random.nextBoolean() ? 1 : -1);
+        int offsetY = (random.nextInt(51) + 50) * (random.nextBoolean() ? 1 : -1);
+        setSizeAndPosition(defW, defH, centerX + offsetX, centerY + offsetY);
         saveNormalState();
     }
 

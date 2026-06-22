@@ -5,8 +5,10 @@ import android.content.Intent;
 import android.database.Cursor;
 import android.net.Uri;
 import android.provider.MediaStore;
+import android.provider.OpenableColumns;
 import android.view.ViewGroup;
 import android.webkit.JavascriptInterface;
+import android.webkit.MimeTypeMap;
 import android.webkit.WebView;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebViewClient;
@@ -652,11 +654,42 @@ public class JavaBridge {
     }
 
     private String getExtFromUri(Uri uri) {
+        if (uri == null) return "";
+
+        // 1. 优先用 MIME 类型反查扩展名
+        String mime = activity.getContentResolver().getType(uri);
+        String ext = null;
+        if (mime != null) {
+            ext = MimeTypeMap.getSingleton().getExtensionFromMimeType(mime);
+            if (ext != null && !ext.isEmpty()) {
+                return "." + ext;
+            }
+        }
+
+        // 2. 尝试从 ContentResolver 查询文件的显示名
+        String[] projection = {OpenableColumns.DISPLAY_NAME};
+        Cursor cursor = null;
+        try {
+            cursor = activity.getContentResolver().query(uri, projection, null, null, null);
+            if (cursor != null && cursor.moveToFirst()) {
+                String displayName = cursor.getString(0);
+                if (displayName != null && displayName.contains(".")) {
+                    return displayName.substring(displayName.lastIndexOf("."));
+                }
+            }
+        } catch (Exception ignored) {
+        } finally {
+            if (cursor != null) cursor.close();
+        }
+
+        // 3. 最后才从 URI 路径本身尝试
         String lastPath = uri.getLastPathSegment();
         if (lastPath != null && lastPath.contains(".")) {
             return lastPath.substring(lastPath.lastIndexOf("."));
         }
-        return "";
+
+        // 4. 什么都拿不到时，给一个安全的默认后缀（根据业务调整）
+        return ".jpg";
     }
 
     private int fileLineCount(String filePath) throws Exception {
