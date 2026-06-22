@@ -122,8 +122,8 @@ private static final String LOG_TAG = "WebViewActivity";
         // 启用缓存
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
 
-        // 设置WebViewClient处理页面加载
-        // webView.setWebViewClient(new WebViewConfig.NewWindowInterceptor());
+        webView.setWebViewClient(PaymentSchemeHandler.createWebViewClient(this));
+
         // 创建文件选择辅助
         mFileChooser = new WebViewConfig.FileChooserHelper();
 

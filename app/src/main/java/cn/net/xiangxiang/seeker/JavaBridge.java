@@ -8,6 +8,7 @@ import android.provider.MediaStore;
 import android.view.ViewGroup;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
+import android.webkit.WebResourceRequest;
 import android.webkit.WebViewClient;
 
 import java.io.File;
@@ -131,9 +132,12 @@ public class JavaBridge {
             return;
         }
         String escaped = escapeForJsString(resultJson);
-        String js = "if(window.__handleJavaBridgeCallback){"
+        /*String js = "if(window.__handleJavaBridgeCallback){"
             + "window.__handleJavaBridgeCallback('" + callbackId + "',JSON.parse('" + escaped + "'));"
-            + "}";
+            + "}";*/
+        String js = "if(window.__handleJavaBridgeCallback){" +
+            "window.__handleJavaBridgeCallback('" + callbackId + "'," + resultJson + ");" +
+            "}";
         activity.runOnUiThread(() -> {
             try {
                 homeWebView.evaluateJavascript(js, null);
@@ -343,6 +347,25 @@ public class JavaBridge {
                 floating.setOnCloseListener(this::removeFromMap);
                 floating.getWebView().addJavascriptInterface(JavaBridge.this, "SubWebViewBridge");
                 floating.getWebView().setWebViewClient(new WebViewClient() {
+                    @Override
+                    public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                        if (PaymentSchemeHandler.handlePaymentUrl(activity, view, url)) {
+                            return true;
+                        }
+                        return super.shouldOverrideUrlLoading(view, url);
+                    }
+
+                    @Override
+                    public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                        if (request != null && request.getUrl() != null) {
+                            String url = request.getUrl().toString();
+                            if (PaymentSchemeHandler.handlePaymentUrl(activity, view, url)) {
+                                return true;
+                            }
+                        }
+                        return super.shouldOverrideUrlLoading(view, request);
+                    }
+
                     @Override
                     public void onPageFinished(WebView view, String url) {
                         view.evaluateJavascript(JavaBridgeConstants.BRIDGE_JS, null);

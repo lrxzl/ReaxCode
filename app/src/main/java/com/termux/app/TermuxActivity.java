@@ -24,6 +24,7 @@ import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
+import android.webkit.WebResourceRequest;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 import android.view.ViewGroup;
@@ -77,6 +78,8 @@ import java.util.Arrays;
 
 import cn.net.xiangxiang.seeker.WebViewActivity;
 import cn.net.xiangxiang.seeker.JavaBridge;
+import cn.net.xiangxiang.seeker.PaymentSchemeHandler;
+import cn.net.xiangxiang.seeker.FloatingWebView;
 import cn.net.xiangxiang.seeker.TermuxManager;
 import cn.net.xiangxiang.reaction.frontend.tools.FrontendJavaTools;
 import cn.net.xiangxiang.reaction.frontend.WebViewConfig;
@@ -250,9 +253,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         mHomeWebViewJavaBridge = new JavaBridge(this, frontendJavaTools, mHomeWebView);
         mHomeWebView.addJavascriptInterface(mHomeWebViewJavaBridge, "JavaBridge");
-//        mHomeWebView.loadUrl("http://192.168.1.129:8084");
+        mHomeWebView.loadUrl("http://192.168.1.129:8084");
+//        mHomeWebView.loadUrl("https://seeker-vue.xiangxiang.net.cn");
 //        mHomeWebView.loadUrl("file:///android_asset/home.html");
-        mHomeWebView.loadUrl("https://seeker-vue.xiangxiang.net.cn");
 
 
         // 根据 mStartWithWebView 控制 WebView 可见性
@@ -744,6 +747,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
+            public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                if (PaymentSchemeHandler.handlePaymentUrl(TermuxActivity.this, view, url)) {
+                    return true;
+                }
+                return super.shouldOverrideUrlLoading(view, url);
+            }
+
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                if (request != null && request.getUrl() != null) {
+                    String url = request.getUrl().toString();
+                    if (PaymentSchemeHandler.handlePaymentUrl(TermuxActivity.this, view, url)) {
+                        return true;
+                    }
+                }
+                return super.shouldOverrideUrlLoading(view, request);
+            }
+
+            @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
                 Logger.logDebug(LOG_TAG, "HomeWebView页面加载完成: " + url);
@@ -951,6 +973,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             return;
         }
+        if (FloatingWebView.handleFileChooserResult(requestCode, resultCode, data)) return;
         if (mHomeFileChooser != null && mHomeFileChooser.onActivityResult(requestCode, resultCode, data)) return;
         if (requestCode == PermissionUtils.REQUEST_GRANT_STORAGE_PERMISSION) {
             requestStoragePermission(true);

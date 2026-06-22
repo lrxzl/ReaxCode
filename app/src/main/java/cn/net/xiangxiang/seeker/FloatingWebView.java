@@ -1,9 +1,13 @@
 package cn.net.xiangxiang.seeker;
 
 import android.annotation.SuppressLint;
+import android.app.Activity;
+import android.content.ClipData;
 import android.content.Context;
+import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
+import android.net.Uri;
 import android.os.Build;
 import android.util.TypedValue;
 import android.view.Gravity;
@@ -12,6 +16,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
+import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -25,10 +30,13 @@ public class FloatingWebView extends FrameLayout {
         void onClosed(FloatingWebView webView);
     }
 
+    public static final int FILE_CHOOSER_REQUEST_CODE_FLOATING = 10012;
+    private static ValueCallback<Uri[]> sPendingFilePathCallback;
+
     private OnCloseListener onCloseListener;
-    private static final float MIN_WIDTH_DP = 200f;
+    private static final float MIN_WIDTH_DP = 260f;
     private static final float MIN_HEIGHT_DP = 120f;
-    private static final float DEFAULT_WIDTH_DP = 240f;
+    private static final float DEFAULT_WIDTH_DP = 260f;
     private static final float DEFAULT_HEIGHT_DP = 400f;
     private static final float TITLE_BAR_HEIGHT_DP = 40f;
     private static final float MIN_VISIBLE_DP = 48f;
@@ -135,9 +143,77 @@ public class FloatingWebView extends FrameLayout {
             public void onReceivedTitle(WebView view, String title) {
                 titleText.setText(title);
             }
+
+            @Override
+            public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback,
+                                             FileChooserParams fileChooserParams) {
+                if (sPendingFilePathCallback != null) {
+                    sPendingFilePathCallback.onReceiveValue(null);
+                }
+                sPendingFilePathCallback = filePathCallback;
+
+                Intent intent;
+                if (fileChooserParams != null && fileChooserParams.getAcceptTypes() != null
+                        && fileChooserParams.getAcceptTypes().length > 0) {
+                    intent = new Intent(Intent.ACTION_GET_CONTENT);
+                    intent.addCategory(Intent.CATEGORY_OPENABLE);
+                    String[] acceptTypes = fileChooserParams.getAcceptTypes();
+                    if (acceptTypes.length == 1 && !"".equals(acceptTypes[0])) {
+                        intent.setType(acceptTypes[0]);
+                    } else if (acceptTypes.length > 1) {
+                        intent.setType("*/*");
+                        intent.putExtra(Intent.EXTRA_MIME_TYPES, acceptTypes);
+                    } else {
+                        intent.setType("*/*");
+                    }
+                    intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,
+                        fileChooserParams.getMode() == FileChooserParams.MODE_OPEN_MULTIPLE);
+                } else {
+                    intent = new Intent(Intent.ACTION_GET_CONTENT);
+                    intent.addCategory(Intent.CATEGORY_OPENABLE);
+                    intent.setType("*/*");
+                }
+
+                Activity activity = getActivity();
+                if (activity != null) {
+                    try {
+                        activity.startActivityForResult(
+                            Intent.createChooser(intent, "选择文件"),
+                            FILE_CHOOSER_REQUEST_CODE_FLOATING);
+                        return true;
+                    } catch (Exception e) {
+                        if (sPendingFilePathCallback != null) {
+                            sPendingFilePathCallback.onReceiveValue(null);
+                            sPendingFilePathCallback = null;
+                        }
+                    }
+                }
+                return false;
+            }
         });
 
-        webView.setWebViewClient(new WebViewClient());
+        webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                if (PaymentSchemeHandler.handlePaymentUrl(
+                        (Activity) context, view, url)) {
+                    return true;
+                }
+                return super.shouldOverrideUrlLoading(view, url);
+            }
+
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                if (request != null && request.getUrl() != null) {
+                    String url = request.getUrl().toString();
+                    if (PaymentSchemeHandler.handlePaymentUrl(
+                            (Activity) context, view, url)) {
+                        return true;
+                    }
+                }
+                return super.shouldOverrideUrlLoading(view, request);
+            }
+        });
         webView.setOnTouchListener((v, event) -> {
             if (event.getAction() == MotionEvent.ACTION_DOWN) {
                 bringToFront();
@@ -191,6 +267,49 @@ public class FloatingWebView extends FrameLayout {
     }
 
     // ---------- 窗口控制 ----------
+
+    /**
+     * 在 Activity.onActivityResult 中调用，处理浮动 WebView 的文件选择结果。
+     */
+    public static boolean handleFileChooserResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode != FILE_CHOOSER_REQUEST_CODE_FLOATING || sPendingFilePathCallback == null) {
+            return false;
+        }
+
+        Uri[] results = null;
+        if (resultCode == Activity.RESULT_OK && data != null) {
+            Uri resultUri = data.getData();
+            if (resultUri != null) {
+                results = new Uri[]{resultUri};
+            }
+            ClipData clipData = data.getClipData();
+            if (clipData != null && clipData.getItemCount() > 0) {
+                results = new Uri[clipData.getItemCount()];
+                for (int i = 0; i < clipData.getItemCount(); i++) {
+                    results[i] = clipData.getItemAt(i).getUri();
+                }
+            }
+        }
+
+        sPendingFilePathCallback.onReceiveValue(results);
+        sPendingFilePathCallback = null;
+        return true;
+    }
+
+    private Activity getActivity() {
+        Context context = getContext();
+        while (context instanceof Context) {
+            if (context instanceof Activity) {
+                return (Activity) context;
+            }
+            if (context instanceof android.content.ContextWrapper) {
+                context = ((android.content.ContextWrapper) context).getBaseContext();
+            } else {
+                break;
+            }
+        }
+        return null;
+    }
 
     // ---------- 新增地址栏对话框方法 ----------
     private void showAddressDialog() {
