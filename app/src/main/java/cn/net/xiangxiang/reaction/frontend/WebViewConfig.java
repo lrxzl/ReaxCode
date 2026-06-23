@@ -3,13 +3,20 @@ package cn.net.xiangxiang.reaction.frontend;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.ClipData;
+import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
+import android.webkit.JsPromptResult;
+import android.webkit.JsResult;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
+import android.widget.EditText;
+import android.widget.FrameLayout;
+
+import androidx.appcompat.app.AlertDialog;
 
 import com.termux.shared.logger.Logger;
 
@@ -151,6 +158,48 @@ public final class WebViewConfig {
                 public void onConsoleMessage(String message, int lineNumber, String sourceID) {
                     Logger.logDebug(LOG_TAG, "JS控制台: " + message +
                         " (行:" + lineNumber + " 源:" + sourceID + ")");
+                }
+
+                @Override
+                public boolean onJsAlert(WebView view, String url, String message, JsResult result) {
+                    new AlertDialog.Builder(view.getContext())
+                        .setMessage(message)
+                        .setPositiveButton(android.R.string.ok, (dialog, which) -> result.confirm())
+                        .setCancelable(false)
+                        .show();
+                    return true;
+                }
+
+                @Override
+                public boolean onJsConfirm(WebView view, String url, String message, JsResult result) {
+                    new AlertDialog.Builder(view.getContext())
+                        .setMessage(message)
+                        .setPositiveButton(android.R.string.ok, (dialog, which) -> result.confirm())
+                        .setNegativeButton(android.R.string.cancel, (dialog, which) -> result.cancel())
+                        .setCancelable(false)
+                        .show();
+                    return true;
+                }
+
+                @Override
+                public boolean onJsPrompt(WebView view, String url, String message, String defaultValue, JsPromptResult result) {
+                    EditText input = new EditText(view.getContext());
+                    if (defaultValue != null) {
+                        input.setText(defaultValue);
+                    }
+                    int padding = (int) (16 * view.getContext().getResources().getDisplayMetrics().density);
+                    FrameLayout container = new FrameLayout(view.getContext());
+                    container.addView(input);
+                    container.setPadding(padding, padding / 2, padding, 0);
+
+                    new AlertDialog.Builder(view.getContext())
+                        .setMessage(message)
+                        .setView(container)
+                        .setPositiveButton(android.R.string.ok, (dialog, which) -> result.confirm(input.getText().toString()))
+                        .setNegativeButton(android.R.string.cancel, (dialog, which) -> result.cancel())
+                        .setCancelable(false)
+                        .show();
+                    return true;
                 }
 
                 // Android 5.0+
