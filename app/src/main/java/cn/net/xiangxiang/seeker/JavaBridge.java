@@ -1048,6 +1048,11 @@ public class JavaBridge {
         if (obj instanceof String || obj instanceof Number || obj instanceof Boolean) {
             return mapper.valueToTree(obj);
         }
-        return mapper.valueToTree(obj);
+        try {
+            return mapper.valueToTree(obj);
+        } catch (Exception e) {
+            log.warning("[toJackson] 序列化失败，回退到 toString: " + e.getMessage());
+            return mapper.valueToTree(obj.toString());
+        }
     }
 }

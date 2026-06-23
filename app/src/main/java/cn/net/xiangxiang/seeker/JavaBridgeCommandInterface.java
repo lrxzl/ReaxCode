@@ -454,7 +454,11 @@ public class JavaBridgeCommandInterface {
      */
     @JavascriptInterface
     public String exec(@NonNull String command, @Nullable Object options) {
-        System.out.println(options);
+        if (options instanceof Map) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> map = (Map<String, Object>) options;
+            return exec(command, map);
+        }
         return exec(command);
     }
     @JavascriptInterface
