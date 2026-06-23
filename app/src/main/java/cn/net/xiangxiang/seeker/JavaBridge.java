@@ -134,9 +134,6 @@ public class JavaBridge {
             return;
         }
         String escaped = escapeForJsString(resultJson);
-        /*String js = "if(window.__handleJavaBridgeCallback){"
-            + "window.__handleJavaBridgeCallback('" + callbackId + "',JSON.parse('" + escaped + "'));"
-            + "}";*/
         String js = "if(window.__handleJavaBridgeCallback){" +
             "window.__handleJavaBridgeCallback('" + callbackId + "'," + resultJson + ");" +
             "}";
@@ -314,15 +311,6 @@ public class JavaBridge {
      */
     public String openOrGetWebViewByUrl(String url) throws Exception {
         synchronized (floatingWebViewMap) {
-            // 1. 查找是否已有相同 URL 的 WebView
-            /*for (Map.Entry<String, WebViewEntry> entry : floatingWebViewMap.entrySet()) {
-                if (url.equals(entry.getValue().url)) {
-                    String existId = entry.getKey();
-                    log.info("[openOrGetWebViewByUrl] Found existing WebView: id=" + existId + ", url=" + url);
-                    return existId;
-                }
-            }*/
-
             // 2. 超过上限则关闭最老的 — LinkedHashMap 第一个 entry 就是最老的
             while (floatingWebViewMap.size() >= JavaBridgeConstants.MAX_WEB_VIEW_COUNT) {
                 String oldestId = floatingWebViewMap.keySet().iterator().next();
@@ -553,7 +541,7 @@ public class JavaBridge {
     private void execWrite(String command) throws Exception {
         Map<String, Object> opts = new HashMap<>();
         opts.put("timeoutMs", 30_000);
-        opts.put("maxResultChars", 1_000);
+        opts.put("maxResultChars", 5_000);
         tools.exec(command, opts);
     }
 
@@ -692,8 +680,11 @@ public class JavaBridge {
         return ".jpg";
     }
 
+    // ==================== 文件操作辅助方法 ====================
+
     private int fileLineCount(String filePath) throws Exception {
         String out = exec("wc -l < " + shellEscapePath(filePath));
+        if (out == null || out.trim().isEmpty()) return 0;
         return Integer.parseInt(out.trim());
     }
 
@@ -701,8 +692,312 @@ public class JavaBridge {
         return "'" + path.replace("'", "'\\\\''") + "'";
     }
 
+    private String truncate(String s, int maxLen) {
+        if (s == null) return "null";
+        if (s.length() <= maxLen) return s;
+        return s.substring(0, maxLen) + "...";
+    }
+
+    private boolean fileExists(String filePath) {
+        return new File(filePath).exists();
+    }
+
+    /** 确保文件存在，自动创建父目录和空文件 */
+    private void ensureFileExists(String filePath) throws Exception {
+        File file = new File(filePath);
+        if (!file.exists()) {
+            File parent = file.getParentFile();
+            if (parent != null && !parent.exists()) {
+                if (!parent.mkdirs()) {
+                    throw new RuntimeException("Failed to create parent directories: " + parent.getAbsolutePath());
+                }
+            }
+            try {
+                if (!file.createNewFile()) {
+                    throw new RuntimeException("Failed to create file (already exists?): " + filePath);
+                }
+            } catch (java.io.IOException e) {
+                throw new RuntimeException("Failed to create file: " + filePath + ": " + e.getMessage(), e);
+            }
+        }
+    }
+
+    /**
+     * 将内容写入临时文件（通过 Java I/O，避免 shell 转义问题）。
+     * 自动规范化换行符为 \n，并确保以换行符结尾。
+     * @return 临时文件路径；如果 content 为 null 或空则返回 null
+     */
+    private String writeContentToTempFile(String content) throws Exception {
+        if (content == null || content.isEmpty()) {
+            return null;
+        }
+        // 规范化换行符并确保以 \n 结尾
+        String normalized = content.replace("\r\n", "\n").replace("\r", "\n");
+        if (!normalized.endsWith("\n")) {
+            normalized = normalized + "\n";
+        }
+        File tmpFile = new File(activity.getCacheDir(), "jbridge_write_" + System.nanoTime() + ".tmp");
+        try (FileOutputStream fos = new FileOutputStream(tmpFile)) {
+            fos.write(normalized.getBytes("UTF-8"));
+        }
+        return tmpFile.getAbsolutePath();
+    }
+
+    /**
+     * 计算内容中的行数（去除尾部空行后的实际行数）。
+     */
+    private int countLines(String content) {
+        if (content == null || content.isEmpty()) return 0;
+        String normalized = content.replace("\r\n", "\n").replace("\r", "\n");
+        while (normalized.endsWith("\n")) {
+            normalized = normalized.substring(0, normalized.length() - 1);
+        }
+        if (normalized.isEmpty()) return 0;
+        return normalized.split("\n", -1).length;
+    }
+
+    /**
+     * 在文件中搜索包含指定文本的所有行号。
+     */
+    private List<Integer> searchLineByText(String filePath, String text) throws Exception {
+        List<Integer> rows = new ArrayList<>();
+        String grepOut;
+        try {
+            grepOut = exec("grep -n -F " + shellEscapePath(text) + " " + shellEscapePath(filePath));
+        } catch (Exception e) {
+            return rows;
+        }
+        if (grepOut == null || grepOut.trim().isEmpty()) return rows;
+
+        for (String line : grepOut.split("\\n")) {
+            int colon = line.indexOf(':');
+            if (colon < 0) continue;
+            try {
+                rows.add(Integer.parseInt(line.substring(0, colon)));
+            } catch (NumberFormatException e) {
+                // skip
+            }
+        }
+        return rows;
+    }
+
+    /**
+     * 二次校验：验证指定行号处的文本是否包含锚点文本。
+     * 如果校验通过，返回 expectedRow；如果校验失败，搜索实际位置并抛出详细错误。
+     * 当 text 为 null 或空时，跳过校验直接返回 expectedRow。
+     */
+    private int verifyLineByText(String filePath, String text, int expectedRow) throws Exception {
+        if (text == null || text.isEmpty()) {
+            return expectedRow;
+        }
+
+        int totalLines = fileLineCount(filePath);
+        String actualContentAtRow = "";
+
+        // 读取 expectedRow 处的实际内容
+        if (expectedRow >= 1 && expectedRow <= totalLines) {
+            String lineContent = exec("sed -n '" + expectedRow + "p' " + shellEscapePath(filePath));
+            if (lineContent != null) {
+                if (lineContent.endsWith("\n")) {
+                    lineContent = lineContent.substring(0, lineContent.length() - 1);
+                }
+                actualContentAtRow = truncate(lineContent, 200);
+                if (lineContent.contains(text)) {
+                    return expectedRow; // 校验通过
+                }
+            }
+        }
+
+        // 校验失败，搜索实际位置
+        List<Integer> matchedRows = searchLineByText(filePath, text);
+
+        String boundsInfo = (expectedRow < 1 || expectedRow > totalLines)
+            ? " (out of bounds, file has " + totalLines + " lines)"
+            : "";
+
+        if (matchedRows.isEmpty()) {
+            throw new IllegalArgumentException(
+                "RowCheck failed: Anchor text not found in file.\n" +
+                    "  filePath=" + filePath + "\n" +
+                    "  expectedRow=" + expectedRow + boundsInfo + "\n" +
+                    "  expectedText=" + truncate(text, 100) + "\n" +
+                    (actualContentAtRow.isEmpty() ? "" : "  actualContent at row " + expectedRow + ": " + actualContentAtRow + "\n") +
+                    "  Suggestion: Read the file first to verify content and row numbers."
+            );
+        }
+
+        if (matchedRows.size() > 1) {
+            throw new IllegalArgumentException(
+                "RowCheck failed: Anchor text found at multiple rows " + matchedRows + ", but not at expectedRow=" + expectedRow + ".\n" +
+                    "  filePath=" + filePath + "\n" +
+                    "  expectedText=" + truncate(text, 100) + "\n" +
+                    (actualContentAtRow.isEmpty() ? "" : "  actualContent at row " + expectedRow + ": " + actualContentAtRow + "\n") +
+                    "  Suggestion: Use one of the matched rows " + matchedRows + " or provide a more unique anchor text."
+            );
+        }
+
+        int actualRow = matchedRows.get(0);
+        throw new IllegalArgumentException(
+            "RowCheck failed: Text not at expectedRow=" + expectedRow + ", actualRow=" + actualRow + ".\n" +
+                "  filePath=" + filePath + "\n" +
+                "  expectedText=" + truncate(text, 100) + "\n" +
+                (actualContentAtRow.isEmpty() ? "" : "  actualContent at row " + expectedRow + ": " + actualContentAtRow + "\n") +
+                "  Suggestion: Use actualRow=" + actualRow + " and retry."
+        );
+    }
+
+    /**
+     * 查找包含指定文本的唯一行。如果找不到或找到多行，抛出详细错误。
+     */
+    private int findUniqueLine(String filePath, String text) throws Exception {
+        List<Integer> matchedRows = searchLineByText(filePath, text);
+
+        if (matchedRows.isEmpty()) {
+            throw new IllegalArgumentException(
+                "Anchor not found: Text not found in file.\n" +
+                    "  filePath=" + filePath + "\n" +
+                    "  anchorText=" + truncate(text, 100) + "\n" +
+                    "  Suggestion: Read the file first to find the correct anchor text."
+            );
+        }
+
+        if (matchedRows.size() > 1) {
+            throw new IllegalArgumentException(
+                "Ambiguous anchor: Text found at " + matchedRows.size() + " rows " + matchedRows + ".\n" +
+                    "  filePath=" + filePath + "\n" +
+                    "  anchorText=" + truncate(text, 100) + "\n" +
+                    "  Suggestion: Provide a longer/more unique anchor text that only matches one line."
+            );
+        }
+
+        return matchedRows.get(0);
+    }
+
+    /**
+     * 使用 head/tail/cat 方式替换文件中指定行范围的内容（比 sed 更可靠）。
+     * 将 startRow 到 endRow 的行替换为 newContent（如果 newContent 为空则删除）。
+     */
+    private void doReplaceLines(String filePath, int startRow, int endRow, String newContent) throws Exception {
+        String contentTmpPath = writeContentToTempFile(newContent);
+        String outputTmpPath = filePath + ".jbridge_tmp_" + System.nanoTime();
+
+        try {
+            StringBuilder cmd = new StringBuilder();
+            boolean first = true;
+
+            // 写入 startRow 之前的行
+            if (startRow > 1) {
+                cmd.append("head -n ").append(startRow - 1).append(" ")
+                    .append(shellEscapePath(filePath)).append(" > ")
+                    .append(shellEscapePath(outputTmpPath));
+                first = false;
+            }
+
+            // 追加新内容
+            if (contentTmpPath != null) {
+                if (!first) cmd.append(" && ");
+                if (first) {
+                    cmd.append("cat ").append(shellEscapePath(contentTmpPath))
+                        .append(" > ").append(shellEscapePath(outputTmpPath));
+                } else {
+                    cmd.append("cat ").append(shellEscapePath(contentTmpPath))
+                        .append(" >> ").append(shellEscapePath(outputTmpPath));
+                }
+                first = false;
+            }
+
+            // 追加 endRow 之后的行
+            if (!first) cmd.append(" && ");
+            if (first) {
+                // 只有 tail，说明是删除操作且 startRow == 1
+                cmd.append("tail -n +").append(endRow + 1).append(" ")
+                    .append(shellEscapePath(filePath)).append(" > ")
+                    .append(shellEscapePath(outputTmpPath));
+            } else {
+                cmd.append("tail -n +").append(endRow + 1).append(" ")
+                    .append(shellEscapePath(filePath)).append(" >> ")
+                    .append(shellEscapePath(outputTmpPath));
+            }
+
+            // 替换原文件
+            cmd.append(" && mv ").append(shellEscapePath(outputTmpPath))
+                .append(" ").append(shellEscapePath(filePath));
+
+            execWrite(cmd.toString());
+        } finally {
+            if (contentTmpPath != null) {
+                new File(contentTmpPath).delete();
+            }
+            // 清理可能残留的输出临时文件
+            File outputTmp = new File(outputTmpPath);
+            if (outputTmp.exists()) {
+                outputTmp.delete();
+            }
+        }
+    }
+
+    /**
+     * 使用 head/tail/cat 方式在指定行后插入内容（比 sed 更可靠）。
+     * afterRow 为 0 时插入到文件开头。
+     */
+    private void doInsertLines(String filePath, int afterRow, String newContent) throws Exception {
+        String contentTmpPath = writeContentToTempFile(newContent);
+        String outputTmpPath = filePath + ".jbridge_tmp_" + System.nanoTime();
+
+        try {
+            StringBuilder cmd = new StringBuilder();
+            boolean first = true;
+
+            // 写入 afterRow 之前的行
+            if (afterRow > 0) {
+                cmd.append("head -n ").append(afterRow).append(" ")
+                    .append(shellEscapePath(filePath)).append(" > ")
+                    .append(shellEscapePath(outputTmpPath));
+                first = false;
+            }
+
+            // 追加新内容
+            if (!first) cmd.append(" && ");
+            if (first) {
+                cmd.append("cat ").append(shellEscapePath(contentTmpPath))
+                    .append(" > ").append(shellEscapePath(outputTmpPath));
+            } else {
+                cmd.append("cat ").append(shellEscapePath(contentTmpPath))
+                    .append(" >> ").append(shellEscapePath(outputTmpPath));
+            }
+            first = false;
+
+            // 追加 afterRow 之后的行
+            cmd.append(" && tail -n +").append(afterRow + 1).append(" ")
+                .append(shellEscapePath(filePath)).append(" >> ")
+                .append(shellEscapePath(outputTmpPath));
+
+            // 替换原文件
+            cmd.append(" && mv ").append(shellEscapePath(outputTmpPath))
+                .append(" ").append(shellEscapePath(filePath));
+
+            execWrite(cmd.toString());
+        } finally {
+            if (contentTmpPath != null) {
+                new File(contentTmpPath).delete();
+            }
+            File outputTmp = new File(outputTmpPath);
+            if (outputTmp.exists()) {
+                outputTmp.delete();
+            }
+        }
+    }
+
     // --- search ---
     private Object searchViaExec(String rootDir, String filePattern, String contentRegex, int contextLineCount) throws Exception {
+        File dir = new File(rootDir);
+        if (!dir.exists()) {
+            throw new IllegalArgumentException("Directory not found: " + rootDir);
+        }
+        if (!dir.isDirectory()) {
+            throw new IllegalArgumentException("Not a directory: " + rootDir);
+        }
+
         List<Map<String, Object>> results = new ArrayList<>();
         StringBuilder cmd = new StringBuilder("grep -rnH -E ");
         if (contextLineCount > 0) {
@@ -712,7 +1007,13 @@ public class JavaBridge {
         if (filePattern != null && !filePattern.isEmpty()) {
             cmd.append(" --include=").append(shellEscapePath(filePattern));
         }
-        String out = exec(cmd.toString());
+        String out;
+        try {
+            out = exec(cmd.toString());
+        } catch (Exception e) {
+            // grep 找不到匹配时返回非零退出码，返回空结果
+            return results;
+        }
         if (out == null || out.trim().isEmpty()) return results;
 
         String[] groups = out.split("\\n--\\n|\\n--$");
@@ -779,6 +1080,10 @@ public class JavaBridge {
 
     // --- readLines ---
     private Object readLinesViaExec(String filePath, int startRow, int endRow) throws Exception {
+        if (!fileExists(filePath)) {
+            throw new IllegalArgumentException("File not found: " + filePath);
+        }
+
         int totalLines = fileLineCount(filePath);
         int s = Math.max(1, startRow);
         int e = Math.min(totalLines, endRow);
@@ -792,6 +1097,11 @@ public class JavaBridge {
             return rr;
         }
         String out = exec("sed -n '" + s + "," + e + "p' " + shellEscapePath(filePath));
+        if (out == null) out = "";
+        // 去除尾部换行，避免多出一个空行
+        if (out.endsWith("\n")) {
+            out = out.substring(0, out.length() - 1);
+        }
         String[] lineTexts = out.split("\\n", -1);
         List<Map<String, Object>> lineList = new ArrayList<>();
         for (int i = 0; i < lineTexts.length; i++) {
@@ -811,13 +1121,45 @@ public class JavaBridge {
 
     // --- listFiles ---
     private Object listFilesViaExec(String directory, String filePattern, int maxDepth) throws Exception {
+        File dir = new File(directory);
+        if (!dir.exists()) {
+            throw new IllegalArgumentException("Directory not found: " + directory);
+        }
+        if (!dir.isDirectory()) {
+            throw new IllegalArgumentException("Not a directory: " + directory);
+        }
+
         if (maxDepth <= 0) maxDepth = 1;
         StringBuilder cmd = new StringBuilder("find ");
         cmd.append(shellEscapePath(directory));
         cmd.append(" -maxdepth ").append(maxDepth).append(" -type f");
+
+        // 排除常见的 gitignore 目录
+        String[] excludeDirs = {
+            ".git", "node_modules", "__pycache__", ".idea", ".vscode",
+            "dist", "build", ".gradle", ".settings", "target", "bin", "obj",
+            ".cache", ".next", ".nuxt", "coverage", ".nyc_output",
+            ".svn", ".hg", "vendor", "venv", ".venv", "env", ".tox",
+            ".pytest_cache", ".mypy_cache", ".eggs", "*.egg-info"
+        };
+        // 排除常见的临时/编译文件
+        String[] excludeFilePatterns = {
+            ".DS_Store", "*.pyc", "*.pyo", "*.class", "*.log", "*.tmp",
+            "*.swp", "*.swo", "*~", "*.bak", "*.o", "*.so", "*.dll",
+            "*.exe", "*.jbridge_tmp_*"
+        };
+
+        for (String d : excludeDirs) {
+            cmd.append(" -not -path '*/").append(d).append("/*'");
+        }
+        for (String pattern : excludeFilePatterns) {
+            cmd.append(" -not -name '").append(pattern).append("'");
+        }
+
         if (filePattern != null && !filePattern.isEmpty()) {
             cmd.append(" -regex ").append(shellEscapePath(filePattern));
         }
+
         String out = exec(cmd.toString());
         if (out == null || out.trim().isEmpty()) return new ArrayList<String>();
         String[] files = out.split("\\n");
@@ -830,25 +1172,53 @@ public class JavaBridge {
 
     // --- replaceLines ---
     private Object replaceLinesViaExec(String filePath, String newContent, String startLineText, String endLineText, int startRow, int endRow) throws Exception {
-        int actualStartRow = findLineByText(filePath, startLineText, startRow);
-        int actualEndRow = findLineByText(filePath, endLineText, endRow);
-        if (actualStartRow > actualEndRow) {
-            throw new IllegalArgumentException("startRow(" + actualStartRow + ") > endRow(" + actualEndRow + ")");
+        if (!fileExists(filePath)) {
+            throw new IllegalArgumentException("File not found: " + filePath);
         }
-        String oldContent = exec("sed -n '" + actualStartRow + "," + actualEndRow + "p' " + shellEscapePath(filePath));
 
-        if (newContent == null || newContent.isEmpty()) {
-            execWrite("sed -i '" + actualStartRow + "," + actualEndRow + "d' " + shellEscapePath(filePath));
-        } else {
-            String tmpFile = filePath + ".tmp";
-            execWrite("printf '%s' " + shellEscapePath(newContent + "\\n") + " > " + shellEscapePath(tmpFile));
-            execWrite("sed -i '" + actualStartRow + "," + actualEndRow + "d;" + actualEndRow + "r " + shellEscapePath(tmpFile) + "' " + shellEscapePath(filePath));
-            execWrite("rm -f " + shellEscapePath(tmpFile));
+        // 二次校验：验证行号与锚点文本一致
+        int actualStartRow = verifyLineByText(filePath, startLineText, startRow);
+        int actualEndRow = verifyLineByText(filePath, endLineText, endRow);
+
+        if (actualStartRow > actualEndRow) {
+            throw new IllegalArgumentException(
+                "startRow(" + actualStartRow + ") > endRow(" + actualEndRow + "). filePath=" + filePath
+            );
         }
+
+        int totalLines = fileLineCount(filePath);
+
+        // 边界检查
+        if (actualStartRow < 1 || actualStartRow > totalLines) {
+            throw new IllegalArgumentException(
+                "startRow " + actualStartRow + " out of bounds [1, " + totalLines + "]. filePath=" + filePath
+            );
+        }
+        if (actualEndRow < 1 || actualEndRow > totalLines) {
+            throw new IllegalArgumentException(
+                "endRow " + actualEndRow + " out of bounds [1, " + totalLines + "]. filePath=" + filePath
+            );
+        }
+
+        // 读取旧内容
+        String oldContent = exec("sed -n '" + actualStartRow + "," + actualEndRow + "p' " + shellEscapePath(filePath));
+        if (oldContent != null && oldContent.endsWith("\n")) {
+            oldContent = oldContent.substring(0, oldContent.length() - 1);
+        }
+
+        // 执行替换
+        doReplaceLines(filePath, actualStartRow, actualEndRow, newContent);
 
         int newTotalLines = fileLineCount(filePath);
         int deletedCount = actualEndRow - actualStartRow + 1;
-        int insertedCount = (newContent == null || newContent.isEmpty()) ? 0 : newContent.split("\\n", -1).length;
+        int insertedCount = countLines(newContent);
+
+        // 行数校验（仅记录警告）
+        int expectedTotalLines = totalLines - deletedCount + insertedCount;
+        if (newTotalLines != expectedTotalLines) {
+            log.warning("[replaceLines] Line count mismatch: expected=" + expectedTotalLines +
+                ", actual=" + newTotalLines + ", filePath=" + filePath);
+        }
 
         Map<String, Object> wr = new HashMap<>();
         wr.put("filePath", filePath);
@@ -864,33 +1234,20 @@ public class JavaBridge {
         return wr;
     }
 
-    private int findLineByText(String filePath, String text, int nearRow) throws Exception {
-        String out = exec("grep -n -F " + shellEscapePath(text) + " " + shellEscapePath(filePath));
-        if (out == null || out.trim().isEmpty()) {
-            throw new IllegalArgumentException("Text not found: " + text);
-        }
-        String[] lines = out.split("\\n");
-        int bestRow = -1;
-        int bestDist = Integer.MAX_VALUE;
-        for (String line : lines) {
-            int colon = line.indexOf(':');
-            if (colon < 0) continue;
-            int row = Integer.parseInt(line.substring(0, colon));
-            int dist = Math.abs(row - nearRow);
-            if (dist < bestDist) {
-                bestDist = dist;
-                bestRow = row;
-            }
-        }
-        return bestRow;
-    }
-
     // --- insertLines ---
     private Object insertLinesViaExec(String filePath, int afterRow, String newContent) throws Exception {
+        // 自动创建文件（包括父目录）
+        if (!fileExists(filePath)) {
+            ensureFileExists(filePath);
+            log.info("[insertLines] Auto-created file: " + filePath);
+        }
+
         int totalLines = fileLineCount(filePath);
         if (afterRow < 1) afterRow = 0;
         if (afterRow > totalLines) afterRow = totalLines;
+
         if (newContent == null || newContent.isEmpty()) {
+            // 空内容，无需操作
             Map<String, Object> wr = new HashMap<>();
             wr.put("filePath", filePath);
             wr.put("originalStartRow", afterRow + 1);
@@ -904,17 +1261,18 @@ public class JavaBridge {
             wr.put("totalLinesAfter", totalLines);
             return wr;
         }
-        String tmpFile = filePath + ".tmp";
-        execWrite("printf '%s\\n' " + shellEscapePath(newContent) + " > " + shellEscapePath(tmpFile));
-        if (afterRow == 0) {
-            execWrite("cat " + shellEscapePath(tmpFile) + " " + shellEscapePath(filePath) + " > " + shellEscapePath(filePath + ".tmp2") + " && mv " + shellEscapePath(filePath + ".tmp2") + " " + shellEscapePath(filePath));
-        } else {
-            execWrite("sed -i '" + afterRow + "r " + shellEscapePath(tmpFile) + "' " + shellEscapePath(filePath));
-        }
-        execWrite("rm -f " + shellEscapePath(tmpFile) + " " + shellEscapePath(filePath + ".tmp2"));
+
+        doInsertLines(filePath, afterRow, newContent);
 
         int newTotalLines = fileLineCount(filePath);
-        int insertedCount = newContent.split("\\n", -1).length;
+        int insertedCount = countLines(newContent);
+
+        // 行数校验（仅记录警告）
+        int expectedTotalLines = totalLines + insertedCount;
+        if (newTotalLines != expectedTotalLines) {
+            log.warning("[insertLines] Line count mismatch: expected=" + expectedTotalLines +
+                ", actual=" + newTotalLines + ", filePath=" + filePath);
+        }
 
         Map<String, Object> wr = new HashMap<>();
         wr.put("filePath", filePath);
@@ -932,6 +1290,10 @@ public class JavaBridge {
 
     // --- replaceByAnchor ---
     private Object replaceByAnchorViaExec(String filePath, String anchorText, int beforeCount, int afterCount, String newContent) throws Exception {
+        if (!fileExists(filePath)) {
+            throw new IllegalArgumentException("File not found: " + filePath);
+        }
+
         int anchorRow = findUniqueLine(filePath, anchorText);
         int startRow = anchorRow - beforeCount;
         int endRow = anchorRow + afterCount;
@@ -939,20 +1301,25 @@ public class JavaBridge {
         if (startRow < 1) startRow = 1;
         if (endRow > totalLines) endRow = totalLines;
 
+        // 读取旧内容
         String oldContent = exec("sed -n '" + startRow + "," + endRow + "p' " + shellEscapePath(filePath));
-
-        if (newContent == null || newContent.isEmpty()) {
-            execWrite("sed -i '" + startRow + "," + endRow + "d' " + shellEscapePath(filePath));
-        } else {
-            String tmpFile = filePath + ".tmp";
-            execWrite("printf '%s\\n' " + shellEscapePath(newContent) + " > " + shellEscapePath(tmpFile));
-            execWrite("sed -i '" + startRow + "," + endRow + "d;" + startRow + "r " + shellEscapePath(tmpFile) + "' " + shellEscapePath(filePath));
-            execWrite("rm -f " + shellEscapePath(tmpFile));
+        if (oldContent != null && oldContent.endsWith("\n")) {
+            oldContent = oldContent.substring(0, oldContent.length() - 1);
         }
+
+        // 执行替换
+        doReplaceLines(filePath, startRow, endRow, newContent);
 
         int newTotalLines = fileLineCount(filePath);
         int deletedCount = endRow - startRow + 1;
-        int insertedCount = (newContent == null || newContent.isEmpty()) ? 0 : newContent.split("\\n", -1).length;
+        int insertedCount = countLines(newContent);
+
+        // 行数校验（仅记录警告）
+        int expectedTotalLines = totalLines - deletedCount + insertedCount;
+        if (newTotalLines != expectedTotalLines) {
+            log.warning("[replaceByAnchor] Line count mismatch: expected=" + expectedTotalLines +
+                ", actual=" + newTotalLines + ", filePath=" + filePath);
+        }
 
         Map<String, Object> wr = new HashMap<>();
         wr.put("filePath", filePath);
@@ -970,27 +1337,22 @@ public class JavaBridge {
 
     // --- insertAfterAnchor ---
     private Object insertAfterAnchorViaExec(String filePath, String anchorText, String newContent) throws Exception {
+        if (!fileExists(filePath)) {
+            throw new IllegalArgumentException("File not found: " + filePath);
+        }
+
         int anchorRow = findUniqueLine(filePath, anchorText);
         return insertLinesViaExec(filePath, anchorRow, newContent);
     }
 
     // --- insertBeforeAnchor ---
     private Object insertBeforeAnchorViaExec(String filePath, String anchorText, String newContent) throws Exception {
+        if (!fileExists(filePath)) {
+            throw new IllegalArgumentException("File not found: " + filePath);
+        }
+
         int anchorRow = findUniqueLine(filePath, anchorText);
         return insertLinesViaExec(filePath, anchorRow - 1, newContent);
-    }
-
-    private int findUniqueLine(String filePath, String text) throws Exception {
-        String out = exec("grep -n -F " + shellEscapePath(text) + " " + shellEscapePath(filePath));
-        if (out == null || out.trim().isEmpty()) {
-            throw new IllegalArgumentException("Anchor text not found: " + text);
-        }
-        String[] lines = out.split("\\n");
-        if (lines.length > 1) {
-            throw new IllegalArgumentException("Ambiguous anchor: " + lines.length + " matches for: " + text);
-        }
-        int colon = lines[0].indexOf(':');
-        return Integer.parseInt(lines[0].substring(0, colon));
     }
 
     private String optNullableText(JsonNode arr, int index) {
