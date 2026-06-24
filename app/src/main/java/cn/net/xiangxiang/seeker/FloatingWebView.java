@@ -406,8 +406,11 @@ public class FloatingWebView extends FrameLayout {
             resizeHandle.setVisibility(VISIBLE);
         } else {
             if (!isMinimized) saveNormalState();
-            // 全屏：避开状态栏，从 (0, statusBarHeight) 开始
-            setSizeAndPosition(screenWidth, screenHeight - statusBarHeight, 0, statusBarHeight);
+            // 全屏：从父容器（decorView）获取实际尺寸，避免底部漏空
+            ViewGroup parent = (ViewGroup) getParent();
+            int actualWidth = (parent != null && parent.getWidth() > 0) ? parent.getWidth() : screenWidth;
+            int actualHeight = (parent != null && parent.getHeight() > 0) ? parent.getHeight() : screenHeight;
+            setSizeAndPosition(actualWidth, actualHeight - statusBarHeight, 0, statusBarHeight);
             isFullscreen = true;
             btnFullscreen.setText("🗗");
             resizeHandle.setVisibility(GONE);

@@ -142,7 +142,7 @@ install_deps() {
     fi
 
     echo "[依赖] 正在构建前端..."
-        NODE_OPTIONS=--no-experimental-detect-module node node_modules/vite/bin/vite.js build 2>&1
+    NODE_OPTIONS=--no-experimental-detect-module node node_modules/vite/bin/vite.js build 2>&1
     if [ $? -ne 0 ]; then
         echo "[错误] 前端构建失败"
         cd ../..
@@ -155,7 +155,7 @@ install_deps() {
 }
 
 # --------------------------------------------------
-# 函数：真正验证依赖是否可用（核心修复）
+# 函数：真正验证依赖是否可用
 # --------------------------------------------------
 verify_deps() {
     echo "[依赖] 验证依赖完整性..."
@@ -173,31 +173,96 @@ verify_deps() {
 }
 
 # --------------------------------------------------
-# 函数：后台静默更新（为下一次启动准备最新代码）
+# 函数：后台静默更新（核心修复版）
 # --------------------------------------------------
 background_update() {
+    # 获取当前脚本的绝对路径，确保日志路径正确
+    local LOG_PATH
+    LOG_PATH="$(cd "$(dirname "$0")" && pwd)/pro-manager.log"
+
     (
-        cd "$PROJECT_DIR" || return
-        git fetch origin master 2>/dev/null || return
-        LOCAL_HASH=$(git rev-parse HEAD)
-        REMOTE_HASH=$(git rev-parse FETCH_HEAD)
-        if [ "$LOCAL_HASH" != "$REMOTE_HASH" ]; then
-            echo "[后台更新] 发现新代码，正在更新..."
-            git reset --hard FETCH_HEAD
-            if [ -f "package.json" ]; then
-                echo "[后台更新] 安装新依赖..."
-                npm install --no-audit --no-fund --silent
+        # 锁文件防止多个更新进程同时运行
+        LOCK_FILE="/tmp/pro-manager-update.lock"
+        if [ -f "$LOCK_FILE" ]; then
+            OLD_PID=$(cat "$LOCK_FILE" 2>/dev/null)
+            # 检查旧进程是否还在运行
+            if kill -0 "$OLD_PID" 2>/dev/null; then
+                echo "[后台更新] 上次更新仍在进行中，跳过"
+                exit 0
             fi
-            if [ -d "web" ]; then
-                echo "[后台更新] 构建前端..."
-                (cd web && npm install --no-audit --no-fund --ignore-scripts 2>&1 && node node_modules/esbuild/install.js 2>&1 && NODE_OPTIONS=--no-experimental-detect-module node node_modules/vite/bin/vite.js build 2>&1)
-            fi
-            echo "[后台更新] 更新完成，新代码将在下次启动时生效"
-        else
-            echo "[后台更新] 当前已是最新代码"
         fi
-    ) &
-    disown
+        echo $$ > "$LOCK_FILE"
+
+        cd "$PROJECT_DIR" || { rm -f "$LOCK_FILE"; exit 1; }
+
+        # 自动检测当前分支
+        CURRENT_BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || echo "master")
+        echo "[后台更新] 当前分支: $CURRENT_BRANCH"
+
+        echo "[后台更新] 检查远程更新..."
+        git fetch origin "$CURRENT_BRANCH" 2>/dev/null || {
+            echo "[后台更新] fetch 失败，可能无网络"
+            rm -f "$LOCK_FILE"
+            exit 0
+        }
+
+        LOCAL_HASH=$(git rev-parse HEAD)
+        REMOTE_HASH=$(git rev-parse "origin/$CURRENT_BRANCH")
+
+        if [ "$LOCAL_HASH" = "$REMOTE_HASH" ]; then
+            echo "[后台更新] 当前已是最新代码 ($LOCAL_HASH:7)"
+            rm -f "$LOCK_FILE"
+            exit 0
+        fi
+
+        echo "[后台更新] 发现新代码: ${LOCAL_HASH:0:7} → ${REMOTE_HASH:0:7}"
+        echo "[后台更新] 正在更新..."
+
+        git reset --hard "origin/$CURRENT_BRANCH" 2>/dev/null || {
+            echo "[后台更新] git reset 失败"
+            rm -f "$LOCK_FILE"
+            exit 1
+        }
+
+        # 检查是否需要更新依赖（package.json 或 lock 文件有变化）
+        NEED_DEPS=false
+
+        # 根目录依赖
+        if [ -f "package.json" ]; then
+            echo "[后台更新] 安装根目录依赖..."
+            npm install --no-audit --no-fund --silent 2>&1
+        fi
+
+        # server 依赖（之前漏掉的！）
+        if [ -d "server" ] && [ -f "server/package.json" ]; then
+            echo "[后台更新] 安装 server 依赖..."
+            (cd server && npm install --no-audit --no-fund --silent 2>&1)
+        fi
+
+        # web 依赖 + 构建
+        if [ -d "web" ] && [ -f "web/package.json" ]; then
+            echo "[后台更新] 安装 web 依赖并构建前端..."
+            (
+                cd web
+                npm install --no-audit --no-fund --ignore-scripts --silent 2>&1
+                node node_modules/esbuild/install.js 2>&1
+                NODE_OPTIONS=--no-experimental-detect-module node node_modules/vite/bin/vite.js build 2>&1
+            )
+            if [ $? -eq 0 ]; then
+                echo "[后台更新] 前端构建成功"
+            else
+                echo "[后台更新] 前端构建失败，下次启动时会重试"
+            fi
+        fi
+
+        echo "[后台更新] ✅ 更新完成，新代码将在下次启动时生效"
+        rm -f "$LOCK_FILE"
+    ) >> "$LOG_PATH" 2>&1 &
+
+    # 获取后台进程 PID
+    local BG_PID=$!
+    disown "$BG_PID" 2>/dev/null
+    echo "[后台更新] 更新任务已提交 (PID: $BG_PID)"
 }
 
 # --------------------------------------------------
@@ -210,7 +275,7 @@ start_service() {
     if [ -n "$PID" ]; then
         if ps -p "$PID" -o comm= 2>/dev/null | grep -q "node"; then
             echo "[启动] 服务已在运行 (PID: $PID)，无需启动"
-            exit 0
+            return 0    # ✅ 修复：改 exit 为 return，让流程继续
         else
             echo "[启动] 端口 $PORT 被其他进程占用，强制释放..."
             kill -9 "$PID" 2>/dev/null
@@ -235,7 +300,7 @@ start_service() {
             cd ..
             exit 1
         fi
-    NODE_OPTIONS=--no-experimental-detect-module node node_modules/vite/bin/vite.js build 2>&1
+        NODE_OPTIONS=--no-experimental-detect-module node node_modules/vite/bin/vite.js build 2>&1
         if [ $? -ne 0 ]; then
             echo "[错误] 前端构建失败"
             cd ..
@@ -293,6 +358,7 @@ main() {
     start_service
 
     # 5. 后台静默更新代码（下次生效）
+    #    ✅ 现在 return 0 不会阻断这里了
     background_update
 
     echo "[完成] 脚本执行完毕 $(date)"

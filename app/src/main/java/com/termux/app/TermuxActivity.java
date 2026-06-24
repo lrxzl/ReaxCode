@@ -18,8 +18,6 @@ import android.view.Gravity;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
-import android.view.MotionEvent;
-
 import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
@@ -79,6 +77,7 @@ import java.util.Arrays;
 import cn.net.xiangxiang.seeker.WebViewActivity;
 import cn.net.xiangxiang.seeker.JavaBridge;
 import cn.net.xiangxiang.seeker.PaymentSchemeHandler;
+import cn.net.xiangxiang.seeker.FloatingToggleButton;
 import cn.net.xiangxiang.seeker.FloatingWebView;
 import cn.net.xiangxiang.seeker.TermuxManager;
 import cn.net.xiangxiang.reaction.frontend.tools.FrontendJavaTools;
@@ -253,8 +252,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         mHomeWebViewJavaBridge = new JavaBridge(this, frontendJavaTools, mHomeWebView);
         mHomeWebView.addJavascriptInterface(mHomeWebViewJavaBridge, "JavaBridge");
-        mHomeWebView.loadUrl("http://192.168.1.129:8084");
-//        mHomeWebView.loadUrl("https://seeker-vue.xiangxiang.net.cn");
+//        mHomeWebView.loadUrl("http://192.168.1.129:8084");
+        mHomeWebView.loadUrl("https://seeker-vue.xiangxiang.net.cn");
 //        mHomeWebView.loadUrl("file:///android_asset/home.html");
 
 
@@ -262,6 +261,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mIsShowingWebView = mStartWithWebView;
 
         mHomeWebView.setVisibility(mStartWithWebView ? View.VISIBLE : View.GONE);
+
+        // 初始化悬浮切换按钮
+        mFloatingToggle = new FloatingToggleButton(this);
+        mFloatingToggle.updateState(mIsShowingWebView);
+        mFloatingToggle.setOnToggleClickListener(isShowingWebView -> toggleWebViewTerminal());
+        ViewGroup contentView = findViewById(android.R.id.content);
+        contentView.addView(mFloatingToggle);
 
 
         // Load termux shared preferences
@@ -535,28 +541,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
 
 
-    /** 快速点击计数相关 */
-    private long mLastTapTime = 0;
-    private int mTapCount = 0;
+    /** 悬浮切换按钮 */
+    private FloatingToggleButton mFloatingToggle;
     private boolean mIsShowingWebView = true;
-    @Override
-    public boolean dispatchTouchEvent(MotionEvent ev) {
-        if (ev.getAction() == MotionEvent.ACTION_DOWN) {
-            final long now = System.currentTimeMillis();
-            if (now - mLastTapTime < 350) {
-                mTapCount++;
-                if (mTapCount == 8) {
-                    mTapCount = 0;
-                    toggleWebViewTerminal();
-                    return true;
-                }
-            } else {
-                mTapCount = 1;
-            }
-            mLastTapTime = now;
-        }
-        return super.dispatchTouchEvent(ev);
-    }
 
     private void toggleWebViewTerminal() {
         mIsShowingWebView = !mIsShowingWebView;
@@ -566,6 +553,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             if (mTerminalView != null) {
                 mTerminalView.setVisibility(mIsShowingWebView ? View.GONE : View.VISIBLE);
+            }
+            if (mFloatingToggle != null) {
+                mFloatingToggle.updateState(mIsShowingWebView);
             }
             Toast.makeText(TermuxActivity.this,
                 mIsShowingWebView ? R.string.msg_switch_to_webview : R.string.msg_switch_to_terminal,
