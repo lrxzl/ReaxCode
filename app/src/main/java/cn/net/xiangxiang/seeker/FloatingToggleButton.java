@@ -1,5 +1,9 @@
 package cn.net.xiangxiang.seeker;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.animation.ValueAnimator;
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
@@ -19,8 +23,9 @@ public class FloatingToggleButton extends FrameLayout {
     }
 
     private static final float BUTTON_SIZE_DP = 48f;
-    private static final float MARGIN_DP = 16f;
+    private static final float MARGIN_DP = 8f;
     private static final int CLICK_THRESHOLD_DP = 10;
+    private static final int SNAP_ANIM_DURATION_MS = 250;
 
     private TextView iconView;
     private OnToggleClickListener listener;
@@ -31,6 +36,9 @@ public class FloatingToggleButton extends FrameLayout {
     private boolean isMoving = false;
 
     private int screenWidth, screenHeight;
+    private int buttonSize;
+    private int halfHiddenOffset;
+    private boolean isSnappedToEdge = false;
 
     public FloatingToggleButton(Context context) {
         super(context);
@@ -51,12 +59,12 @@ public class FloatingToggleButton extends FrameLayout {
         iconView.setContentDescription(isShowingWebView ? "切换到终端" : "切换到主页");
     }
 
+    @SuppressLint("ClickableViewAccessibility")
     private void init(Context context) {
         screenWidth = context.getResources().getDisplayMetrics().widthPixels;
         screenHeight = context.getResources().getDisplayMetrics().heightPixels;
-
-        int buttonSize = dpToPx(BUTTON_SIZE_DP);
-        int margin = dpToPx(MARGIN_DP);
+        buttonSize = dpToPx(BUTTON_SIZE_DP);
+        halfHiddenOffset = buttonSize / 2;
 
         GradientDrawable bg = new GradientDrawable();
         bg.setShape(GradientDrawable.OVAL);
@@ -77,12 +85,6 @@ public class FloatingToggleButton extends FrameLayout {
 
         updateIcon();
 
-        LayoutParams params = new LayoutParams(buttonSize, buttonSize);
-        params.gravity = Gravity.BOTTOM | Gravity.END;
-        params.rightMargin = margin;
-        params.bottomMargin = margin;
-        setLayoutParams(params);
-
         setOnTouchListener((v, event) -> {
             switch (event.getAction()) {
                 case MotionEvent.ACTION_DOWN:
@@ -100,10 +102,11 @@ public class FloatingToggleButton extends FrameLayout {
                         isMoving = true;
                     }
                     if (isMoving) {
+                        isSnappedToEdge = false;
                         int newX = startX + (int) dx;
                         int newY = startY + (int) dy;
-                        newX = Math.max(0, Math.min(newX, screenWidth - getWidth()));
-                        newY = Math.max(0, Math.min(newY, screenHeight - getHeight()));
+                        newX = Math.max(0, Math.min(newX, screenWidth - buttonSize));
+                        newY = Math.max(0, Math.min(newY, screenHeight - buttonSize));
                         LayoutParams p = (LayoutParams) getLayoutParams();
                         p.leftMargin = newX;
                         p.topMargin = newY;
@@ -118,10 +121,38 @@ public class FloatingToggleButton extends FrameLayout {
                         listener.onToggleClick(isShowingWebView);
                     }
                     isMoving = false;
+                    snapToEdge();
                     return true;
             }
             return false;
         });
+    }
+
+    public void snapToEdge() {
+        snapToEdge(false);
+    }
+
+    public void snapToEdge(boolean centerVertically) {
+        int currentCenterX = getLeft() + buttonSize / 2;
+        boolean snapRight = currentCenterX >= screenWidth / 2;
+        int targetX = snapRight ? screenWidth - halfHiddenOffset : -halfHiddenOffset;
+
+        LayoutParams p = (LayoutParams) getLayoutParams();
+        int fromX = p.leftMargin;
+        int fromY = p.topMargin;
+        int targetY = centerVertically ? (screenHeight - buttonSize) / 2 : fromY;
+
+        ValueAnimator anim = ValueAnimator.ofFloat(0f, 1f);
+        anim.setDuration(SNAP_ANIM_DURATION_MS);
+        anim.addUpdateListener(animation -> {
+            float fraction = animation.getAnimatedFraction();
+            LayoutParams lp = (LayoutParams) getLayoutParams();
+            lp.leftMargin = fromX + (int) ((targetX - fromX) * fraction);
+            lp.topMargin = fromY + (int) ((targetY - fromY) * fraction);
+            lp.gravity = Gravity.TOP | Gravity.START;
+            setLayoutParams(lp);
+        });
+        anim.start();
     }
 
     private int dpToPx(float dp) {

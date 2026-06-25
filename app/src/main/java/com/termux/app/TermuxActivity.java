@@ -267,7 +267,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mFloatingToggle.updateState(mIsShowingWebView);
         mFloatingToggle.setOnToggleClickListener(isShowingWebView -> toggleWebViewTerminal());
         ViewGroup contentView = findViewById(android.R.id.content);
-        contentView.addView(mFloatingToggle);
+        int btnSize = (int) (48 * getResources().getDisplayMetrics().density + 0.5f);
+        FrameLayout.LayoutParams btnParams = new FrameLayout.LayoutParams(btnSize, btnSize);
+        contentView.addView(mFloatingToggle, btnParams);
+        mFloatingToggle.post(() -> mFloatingToggle.snapToEdge(true));
 
 
         // Load termux shared preferences

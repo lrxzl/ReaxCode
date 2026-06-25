@@ -102,7 +102,7 @@ public class TermuxApplication extends Application {
 //                Logger.logStackTraceWithMessage(LOG_TAG, "启动初始化脚本执行异常", e);
 //            }
 //        }, "startup-dep-script").start();
-
+// //wget  https://seeker-vue.xiangxiang.net.cn/dep_termux.sh
         new Thread(() -> {
             try {
                 // 只有前2次启动需要等待8秒，确保系统初始化完成

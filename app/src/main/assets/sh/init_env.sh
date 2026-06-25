@@ -5,7 +5,7 @@
 # 所有输出静默写入 ./pro-manager.log
 # ============================================
 
-CURRENT_VERSION="0.5.5"
+CURRENT_VERSION="0.5.6"
 REPO_URL="https://gitee.com/lrxzlcn/pro-manager.git"
 PROJECT_DIR="pro-manager"
 PORT=3456
@@ -173,93 +173,96 @@ verify_deps() {
 }
 
 # --------------------------------------------------
-# 函数：后台静默更新（核心修复版）
+# 函数：后台静默更新（修复版）
 # --------------------------------------------------
 background_update() {
-    # 获取当前脚本的绝对路径，确保日志路径正确
     local LOG_PATH
     LOG_PATH="$(cd "$(dirname "$0")" && pwd)/pro-manager.log"
 
-    (
-        # 锁文件防止多个更新进程同时运行
+    # 使用 nohup + bash -c 启动独立进程
+    # ① 确保 $$ 返回的是本进程 PID（不再是父进程的）
+    # ② 确保父脚本退出后子进程不会被 SIGHUP 杀死
+    PROJECT_DIR="$PROJECT_DIR" nohup bash -c '
         LOCK_FILE="/tmp/pro-manager-update.lock"
+
+        # ------ 锁检查 ------
         if [ -f "$LOCK_FILE" ]; then
             OLD_PID=$(cat "$LOCK_FILE" 2>/dev/null)
-            # 检查旧进程是否还在运行
-            if kill -0 "$OLD_PID" 2>/dev/null; then
-                echo "[后台更新] 上次更新仍在进行中，跳过"
+            if [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" 2>/dev/null; then
+                echo "[后台更新] 上次更新仍在进行中 (PID: $OLD_PID)，跳过"
                 exit 0
             fi
         fi
         echo $$ > "$LOCK_FILE"
+        trap "rm -f $LOCK_FILE" EXIT INT TERM
 
-        cd "$PROJECT_DIR" || { rm -f "$LOCK_FILE"; exit 1; }
+        cd "$PROJECT_DIR" || exit 1
 
-        # 自动检测当前分支
-        CURRENT_BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || echo "master")
+        # ------ 分支检测（增强） ------
+        CURRENT_BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null)
+        if [ -z "$CURRENT_BRANCH" ]; then
+            # 尝试从远程获取默认分支名
+            CURRENT_BRANCH=$(git remote show origin 2>/dev/null | grep "HEAD branch" | sed "s/.*: //")
+            if [ -z "$CURRENT_BRANCH" ]; then
+                CURRENT_BRANCH="master"
+            fi
+        fi
         echo "[后台更新] 当前分支: $CURRENT_BRANCH"
 
+        # ------ fetch（不再吞掉错误） ------
         echo "[后台更新] 检查远程更新..."
-        git fetch origin "$CURRENT_BRANCH" 2>/dev/null || {
-            echo "[后台更新] fetch 失败，可能无网络"
-            rm -f "$LOCK_FILE"
+        if ! git fetch origin 2>&1; then
+            echo "[后台更新] ❌ fetch 失败，可能无网络"
             exit 0
-        }
+        fi
 
-        LOCAL_HASH=$(git rev-parse HEAD)
-        REMOTE_HASH=$(git rev-parse "origin/$CURRENT_BRANCH")
+        LOCAL_HASH=$(git rev-parse HEAD 2>/dev/null)
+        REMOTE_HASH=$(git rev-parse "origin/$CURRENT_BRANCH" 2>/dev/null)
+
+        if [ -z "$REMOTE_HASH" ]; then
+            echo "[后台更新] ❌ 无法获取远程分支 origin/$CURRENT_BRANCH 的哈希"
+            echo "[后台更新] 可用的远程分支:"
+            git branch -r 2>/dev/null
+            exit 0
+        fi
 
         if [ "$LOCAL_HASH" = "$REMOTE_HASH" ]; then
-            echo "[后台更新] 当前已是最新代码 ($LOCAL_HASH:7)"
-            rm -f "$LOCK_FILE"
+            echo "[后台更新] 当前已是最新代码 (${LOCAL_HASH:0:7})"
             exit 0
         fi
 
-        echo "[后台更新] 发现新代码: ${LOCAL_HASH:0:7} → ${REMOTE_HASH:0:7}"
-        echo "[后台更新] 正在更新..."
+        echo "[后台更新] 🔔 发现新代码: ${LOCAL_HASH:0:7} → ${REMOTE_HASH:0:7}"
+        echo "[后台更新] 正在拉取更新..."
 
-        git reset --hard "origin/$CURRENT_BRANCH" 2>/dev/null || {
-            echo "[后台更新] git reset 失败"
-            rm -f "$LOCK_FILE"
+        if ! git reset --hard "origin/$CURRENT_BRANCH" 2>&1; then
+            echo "[后台更新] ❌ git reset 失败"
             exit 1
-        }
+        fi
 
-        # 检查是否需要更新依赖（package.json 或 lock 文件有变化）
-        NEED_DEPS=false
-
-        # 根目录依赖
+        # ------ 依赖安装 ------
         if [ -f "package.json" ]; then
             echo "[后台更新] 安装根目录依赖..."
-            npm install --no-audit --no-fund --silent 2>&1
+            npm install --no-audit --no-fund 2>&1
         fi
 
-        # server 依赖（之前漏掉的！）
         if [ -d "server" ] && [ -f "server/package.json" ]; then
             echo "[后台更新] 安装 server 依赖..."
-            (cd server && npm install --no-audit --no-fund --silent 2>&1)
+            (cd server && npm install --no-audit --no-fund 2>&1)
         fi
 
-        # web 依赖 + 构建
         if [ -d "web" ] && [ -f "web/package.json" ]; then
             echo "[后台更新] 安装 web 依赖并构建前端..."
             (
                 cd web
-                npm install --no-audit --no-fund --ignore-scripts --silent 2>&1
+                npm install --no-audit --no-fund --ignore-scripts 2>&1
                 node node_modules/esbuild/install.js 2>&1
                 NODE_OPTIONS=--no-experimental-detect-module node node_modules/vite/bin/vite.js build 2>&1
-            )
-            if [ $? -eq 0 ]; then
-                echo "[后台更新] 前端构建成功"
-            else
-                echo "[后台更新] 前端构建失败，下次启动时会重试"
-            fi
+            ) && echo "[后台更新] 前端构建成功" || echo "[后台更新] ⚠️ 前端构建失败，下次启动时会重试"
         fi
 
         echo "[后台更新] ✅ 更新完成，新代码将在下次启动时生效"
-        rm -f "$LOCK_FILE"
-    ) >> "$LOG_PATH" 2>&1 &
+    ' >> "$LOG_PATH" 2>&1 &
 
-    # 获取后台进程 PID
     local BG_PID=$!
     disown "$BG_PID" 2>/dev/null
     echo "[后台更新] 更新任务已提交 (PID: $BG_PID)"
@@ -275,7 +278,7 @@ start_service() {
     if [ -n "$PID" ]; then
         if ps -p "$PID" -o comm= 2>/dev/null | grep -q "node"; then
             echo "[启动] 服务已在运行 (PID: $PID)，无需启动"
-            return 0    # ✅ 修复：改 exit 为 return，让流程继续
+            return 0
         else
             echo "[启动] 端口 $PORT 被其他进程占用，强制释放..."
             kill -9 "$PID" 2>/dev/null
@@ -283,7 +286,7 @@ start_service() {
         fi
     fi
 
-    cd "$PROJECT_DIR" || exit 1
+    cd "$PROJECT_DIR" || return 1
 
     # 确保前端已构建
     if [ ! -f "web/dist/index.html" ]; then
@@ -292,19 +295,19 @@ start_service() {
         if [ $? -ne 0 ]; then
             echo "[错误] web 依赖安装失败"
             cd ..
-            exit 1
+            return 1
         fi
         node node_modules/esbuild/install.js 2>&1
         if [ $? -ne 0 ]; then
             echo "[错误] esbuild 安装失败"
             cd ..
-            exit 1
+            return 1
         fi
         NODE_OPTIONS=--no-experimental-detect-module node node_modules/vite/bin/vite.js build 2>&1
         if [ $? -ne 0 ]; then
             echo "[错误] 前端构建失败"
             cd ..
-            exit 1
+            return 1
         fi
         cd ..
         echo "[启动] 前端构建完成"
@@ -313,21 +316,39 @@ start_service() {
     echo "[启动] 正在后台启动服务..."
     nohup node server/index.js >> ../pro-manager.log 2>&1 &
     SERVICE_PID=$!
-    sleep 2
 
-    # 验证启动
-    if lsof -ti:"$PORT" > /dev/null 2>&1; then
-        echo "=========================================="
-        echo "  Pro-Manager 启动成功！"
-        echo "  访问地址: http://localhost:$PORT"
-        echo "  PID: $SERVICE_PID"
-        echo "  日志文件: $LOG_FILE"
-        echo "=========================================="
-    else
-        echo "[错误] 启动失败，请查看上方日志"
-        exit 1
-    fi
+    # 验证启动（重试 15 次，每次 1 秒）
+    local retry=0
+    local max_retries=15
+    echo "[启动] 等待服务响应..."
+
+    while [ $retry -lt $max_retries ]; do
+        sleep 1
+        # 使用 curl 检测比 lsof 更准确，不受权限影响
+        if curl -s "http://localhost:$PORT" > /dev/null 2>&1; then
+            echo "=========================================="
+            echo "  Pro-Manager 启动成功！"
+            echo "  访问地址: http://localhost:$PORT"
+            echo "  PID: $SERVICE_PID"
+            echo "  日志文件: $LOG_FILE"
+            echo "=========================================="
+            cd ..
+            return 0
+        fi
+
+        # 检查进程是否已经崩溃退出
+        if ! kill -0 "$SERVICE_PID" 2>/dev/null; then
+            echo "[错误] node 进程意外退出，请查看日志"
+            cd ..
+            return 1
+        fi
+        retry=$((retry + 1))
+    done
+
+    echo "[警告] 服务启动超时(15秒)，但进程仍在后台运行"
+    echo "[提示] 服务可能仍在初始化，稍后请自行访问 http://localhost:$PORT 确认"
     cd ..
+    return 0  # 即使超时也返回0，不阻断后续的后台更新流程
 }
 
 # ================== 主流程 ==================
