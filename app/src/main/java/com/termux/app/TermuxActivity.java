@@ -701,15 +701,31 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
 
+    private long mLastBackPressTime = 0;
+
     @SuppressLint("RtlHardcoded")
     @Override
     public void onBackPressed() {
-        if (mHomeWebView != null && mHomeWebView.canGoBack()) {
+        FloatingWebView topFwv = null;
+        if (mHomeWebViewJavaBridge != null) {
+            topFwv = mHomeWebViewJavaBridge.getTopmostNonMinimizedFloatingWebView();
+        }
+
+        if (topFwv != null && topFwv.getWebView().canGoBack()) {
+            topFwv.getWebView().goBack();
+            showToast("再按一次退出", false);
+        } else if (mHomeWebView != null && mHomeWebView.canGoBack()) {
             mHomeWebView.goBack();
         } else if (getDrawer().isDrawerOpen(Gravity.LEFT)) {
             getDrawer().closeDrawers();
         } else {
-            moveTaskToBack(true);
+            long now = System.currentTimeMillis();
+            if (now - mLastBackPressTime < 2000) {
+                finish();
+            } else {
+                mLastBackPressTime = now;
+                showToast("再按一次退出", false);
+            }
         }
     }
 

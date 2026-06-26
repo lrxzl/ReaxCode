@@ -6,6 +6,7 @@ import android.database.Cursor;
 import android.net.Uri;
 import android.provider.MediaStore;
 import android.provider.OpenableColumns;
+import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.JavascriptInterface;
 import android.webkit.MimeTypeMap;
@@ -251,7 +252,7 @@ public class JavaBridge {
 
             case "openOrGetWebViewByUrl": {
                 String url = args.get(0).asText();
-                return openOrGetWebViewByUrl(url);
+                    return openOrGetWebViewByUrl(url);
             }
 
             case "getCurrentWebViewListInfos": {
@@ -458,6 +459,27 @@ public class JavaBridge {
                 }
             }
         }
+    }
+
+    /**
+     * 获取前台最顶部的未折叠的 FloatingWebView。
+     * 通过 z-order（bringToFront 保证最后添加/操作的在最上层）判断，
+     * 遍历 decorView 的子 View 找到最后一个 FloatingWebView 且未折叠的。
+     */
+    public FloatingWebView getTopmostNonMinimizedFloatingWebView() {
+        ViewGroup decorView = (ViewGroup) activity.getWindow().getDecorView();
+        FloatingWebView result = null;
+        for (int i = decorView.getChildCount() - 1; i >= 0; i--) {
+            View child = decorView.getChildAt(i);
+            if (child instanceof FloatingWebView) {
+                FloatingWebView fwv = (FloatingWebView) child;
+                if (!fwv.isMinimized()) {
+                    result = fwv;
+                    break;
+                }
+            }
+        }
+        return result;
     }
 
     /** 关闭指定 id 的浮动 WebView（对外，含 UI 线程销毁） */
