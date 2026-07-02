@@ -1,5 +1,7 @@
 package cn.net.xiangxiang.seeker;
 
+import com.termux.R;
+
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.ClipData;
@@ -21,6 +23,7 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -47,7 +50,7 @@ public class FloatingWebView extends FrameLayout {
     private TextView titleText;
     private TextView btnMinimize, btnZoomIn, btnZoomOut, btnFullscreen, btnClose, btnSearch;
     private WebView webView;
-    private View resizeHandle;
+    private ImageView resizeHandle;
 
     private int screenWidth, screenHeight, statusBarHeight;
     private boolean isFullscreen = false;
@@ -115,13 +118,13 @@ public class FloatingWebView extends FrameLayout {
             0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
         titleBar.addView(titleText, titleParams);
 
-        btnMinimize = createButton(context, "▁", v -> toggleMinimize());
+        btnMinimize = createIconButton(context, R.drawable.ic_window_minimize, v -> toggleMinimize());
         btnZoomOut  = createButton(context, "－", v -> zoomOut());
         btnZoomIn   = createButton(context, "＋", v -> zoomIn());
-        btnFullscreen = createButton(context, "🗖", v -> toggleFullscreen());
-        btnClose    = createButton(context, "✕", v -> close());
+        btnFullscreen = createIconButton(context, R.drawable.ic_window_maximize, v -> toggleFullscreen());
+        btnClose    = createIconButton(context, R.drawable.ic_window_close, v -> close());
 
-        btnSearch = createButton(context, "🔍", v -> {
+        btnSearch = createIconButton(context, R.drawable.ic_web_address, v -> {
             // 如果是最小化状态，先恢复窗口
             if (isMinimized) {
                 toggleMinimize();
@@ -239,8 +242,9 @@ public class FloatingWebView extends FrameLayout {
             ViewGroup.LayoutParams.MATCH_PARENT));
 
         // 右下角缩放把手
-        resizeHandle = new View(context);
-        resizeHandle.setBackgroundColor(Color.parseColor("#A0A0A0"));
+        resizeHandle = new ImageView(context);
+        ((ImageView) resizeHandle).setImageResource(R.drawable.ic_resize_handle);
+        resizeHandle.setPadding(dpToPx(2), dpToPx(2), dpToPx(2), dpToPx(2));
         LayoutParams handleParams = new LayoutParams(dpToPx(20), dpToPx(20));
         handleParams.gravity = Gravity.BOTTOM | Gravity.END;
         handleParams.bottomMargin = dpToPx(4);
@@ -380,7 +384,8 @@ public class FloatingWebView extends FrameLayout {
             webView.setVisibility(VISIBLE);
             resizeHandle.setVisibility(VISIBLE);
             isMinimized = false;
-            btnMinimize.setText("▁");
+            btnMinimize.setCompoundDrawablesRelativeWithIntrinsicBounds(
+                R.drawable.ic_window_minimize, 0, 0, 0);
         } else {
             saveNormalState();
             webView.setVisibility(GONE);
@@ -388,7 +393,8 @@ public class FloatingWebView extends FrameLayout {
             int titleH = dpToPx(TITLE_BAR_HEIGHT_DP);
             setSizeAndPosition(getWidth(), titleH, getLeft(), getTop());
             isMinimized = true;
-            btnMinimize.setText("⬒");
+            btnMinimize.setCompoundDrawablesRelativeWithIntrinsicBounds(
+                R.drawable.ic_window_minimize_expanded, 0, 0, 0);
         }
     }
 
@@ -408,7 +414,8 @@ public class FloatingWebView extends FrameLayout {
             // 恢复普通尺寸（位置和大小均已保存）
             setSizeAndPosition(normalWidth, normalHeight, normalX, normalY);
             isFullscreen = false;
-            btnFullscreen.setText("🗖");
+            btnFullscreen.setCompoundDrawablesRelativeWithIntrinsicBounds(
+                R.drawable.ic_window_maximize, 0, 0, 0);
             resizeHandle.setVisibility(VISIBLE);
         } else {
             if (!isMinimized) saveNormalState();
@@ -418,7 +425,8 @@ public class FloatingWebView extends FrameLayout {
             int actualHeight = (parent != null && parent.getHeight() > 0) ? parent.getHeight() : screenHeight;
             setSizeAndPosition(actualWidth, actualHeight - statusBarHeight, 0, statusBarHeight);
             isFullscreen = true;
-            btnFullscreen.setText("🗗");
+            btnFullscreen.setCompoundDrawablesRelativeWithIntrinsicBounds(
+                R.drawable.ic_window_restore, 0, 0, 0);
             resizeHandle.setVisibility(GONE);
         }
     }
@@ -569,6 +577,32 @@ public class FloatingWebView extends FrameLayout {
         btn.setClickable(true);
         btn.setFocusable(true);
         btn.setOnClickListener(listener);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            int[] attrs = new int[]{android.R.attr.selectableItemBackgroundBorderless};
+            android.content.res.TypedArray ta = context.obtainStyledAttributes(attrs);
+            btn.setBackground(ta.getDrawable(0));
+            ta.recycle();
+        }
+        return btn;
+    }
+
+    @SuppressLint("NewApi")
+    private TextView createIconButton(Context context, int drawableRes, View.OnClickListener listener) {
+        TextView btn = new TextView(context);
+        btn.setGravity(Gravity.CENTER);
+        btn.setBackgroundColor(Color.TRANSPARENT);
+        int size = dpToPx(36);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(size, size);
+        params.gravity = Gravity.CENTER_VERTICAL;
+        btn.setLayoutParams(params);
+        btn.setClickable(true);
+        btn.setFocusable(true);
+        btn.setOnClickListener(listener);
+        // 设置图标作为 compound drawable（左侧）
+        android.graphics.drawable.Drawable icon = context.getResources().getDrawable(drawableRes);
+        icon.setBounds(0, 0, dpToPx(20), dpToPx(20));
+        btn.setCompoundDrawables(icon, null, null, null);
+        btn.setCompoundDrawablePadding(0);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             int[] attrs = new int[]{android.R.attr.selectableItemBackgroundBorderless};
             android.content.res.TypedArray ta = context.obtainStyledAttributes(attrs);

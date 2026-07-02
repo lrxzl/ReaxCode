@@ -173,15 +173,13 @@ verify_deps() {
 }
 
 # --------------------------------------------------
-# 函数：后台静默更新（修复版）
+# 函数：后台静默更新（强制更新版）
+# 只要远程有新代码，就强制更新，丢弃所有本地改动
 # --------------------------------------------------
 background_update() {
     local LOG_PATH
     LOG_PATH="$(cd "$(dirname "$0")" && pwd)/pro-manager.log"
 
-    # 使用 nohup + bash -c 启动独立进程
-    # ① 确保 $$ 返回的是本进程 PID（不再是父进程的）
-    # ② 确保父脚本退出后子进程不会被 SIGHUP 杀死
     PROJECT_DIR="$PROJECT_DIR" nohup bash -c '
         LOCK_FILE="/tmp/pro-manager-update.lock"
 
@@ -198,18 +196,18 @@ background_update() {
 
         cd "$PROJECT_DIR" || exit 1
 
-        # ------ 分支检测（增强） ------
+        # ------ 分支检测 ------
         CURRENT_BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null)
         if [ -z "$CURRENT_BRANCH" ]; then
             # 尝试从远程获取默认分支名
-            CURRENT_BRANCH=$(git remote show origin 2>/dev/null | grep "HEAD branch" | sed "s/.*: //")
+            # CURRENT_BRANCH=$(git remote show origin 2>/dev/null | grep "HEAD branch" | sed "s/.*: //")
             if [ -z "$CURRENT_BRANCH" ]; then
-                CURRENT_BRANCH="master"
+                CURRENT_BRANCH="dev"
             fi
         fi
         echo "[后台更新] 当前分支: $CURRENT_BRANCH"
 
-        # ------ fetch（不再吞掉错误） ------
+        # ------ fetch ------
         echo "[后台更新] 检查远程更新..."
         if ! git fetch origin 2>&1; then
             echo "[后台更新] ❌ fetch 失败，可能无网络"
@@ -232,12 +230,20 @@ background_update() {
         fi
 
         echo "[后台更新] 🔔 发现新代码: ${LOCAL_HASH:0:7} → ${REMOTE_HASH:0:7}"
-        echo "[后台更新] 正在拉取更新..."
+        echo "[后台更新] 正在强制拉取更新（丢弃所有本地改动）..."
 
+        # ====== 强制更新：丢弃所有本地改动 ======
+        # 1) 丢弃所有已跟踪文件的本地修改
+        git checkout . 2>&1 || true
+        # 2) 强制重置到远程分支（丢弃本地提交 + 已暂存改动）
         if ! git reset --hard "origin/$CURRENT_BRANCH" 2>&1; then
-            echo "[后台更新] ❌ git reset 失败"
+            echo "[后台更新] ❌ git reset --hard 失败"
             exit 1
         fi
+        # 3) 清理未跟踪的文件和目录（-fd），但保留 .gitignore 忽略的文件（如 node_modules）
+        git clean -fd 2>&1 || true
+
+        echo "[后台更新] ✅ 代码已强制更新到 ${REMOTE_HASH:0:7}"
 
         # ------ 依赖安装 ------
         if [ -f "package.json" ]; then
