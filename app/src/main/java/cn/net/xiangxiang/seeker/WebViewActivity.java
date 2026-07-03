@@ -151,6 +151,24 @@ private static final String LOG_TAG = "WebViewActivity";
     }
 
     @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        Logger.logDebug(LOG_TAG, "onSaveInstanceState");
+        if (mWebView != null) {
+            mWebView.saveState(outState);
+        }
+    }
+
+    @Override
+    protected void onRestoreInstanceState(Bundle savedInstanceState) {
+        super.onRestoreInstanceState(savedInstanceState);
+        Logger.logDebug(LOG_TAG, "onRestoreInstanceState");
+        if (mWebView != null) {
+            mWebView.restoreState(savedInstanceState);
+        }
+    }
+
+    @Override
     protected void onDestroy() {
         super.onDestroy();
         Logger.logDebug(LOG_TAG, "onDestroy");

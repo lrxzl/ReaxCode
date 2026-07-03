@@ -41,8 +41,8 @@ public class FloatingWebView extends FrameLayout {
     private OnCloseListener onCloseListener;
     private static final float MIN_WIDTH_DP = 260f;
     private static final float MIN_HEIGHT_DP = 120f;
-    private static final float DEFAULT_WIDTH_DP = 260f;
-    private static final float DEFAULT_HEIGHT_DP = 420f;
+    private static final float DEFAULT_WIDTH_DP = 280f;
+    private static final float DEFAULT_HEIGHT_DP = 460f;
     private static final float TITLE_BAR_HEIGHT_DP = 40f;
     private static final float MIN_VISIBLE_DP = 48f;
 
