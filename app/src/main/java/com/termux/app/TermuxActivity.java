@@ -721,10 +721,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         } else {
             long now = System.currentTimeMillis();
             if (now - mLastBackPressTime < 2000) {
-                finish();
+                // finish();
+                moveTaskToBack(true);
             } else {
                 mLastBackPressTime = now;
-                showToast("再按一次退出", false);
+                showToast("再按一次回主界面", false);
             }
         }
     }

@@ -60,6 +60,9 @@ private static final String LOG_TAG = "WebViewActivity";
         super.onCreate(savedInstanceState);
         Logger.logDebug(LOG_TAG, "onCreate");
 
+        // 启动前台服务保持后台运行
+        WebViewService.startService(this);
+
         // 初始化TermuxManager
         mTermuxManager = TermuxManager.getInstance();
         mTermuxManager.init(this);

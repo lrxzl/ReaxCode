@@ -221,6 +221,10 @@
             </intent-filter>
         </service>
 
+        <service
+            android:name="cn.net.xiangxiang.seeker.WebViewService"
+            android:exported="false" />
+
 
         <!-- This (or rather, value 2.1 or higher) is needed to make the Samsung Galaxy S8 mark the
         app with "This app is optimized to run in full screen." -->
