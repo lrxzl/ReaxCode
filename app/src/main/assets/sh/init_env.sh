@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================
-# Pro-Manager 启动脚本 (快速版)
+# Pro-Manager 启动脚本 (快速版 + 守护进程)
 # 首次慢，后续秒启；代码更新在后台进行，下次执行生效
 # 所有输出静默写入 ./pro-manager.log
 # ============================================
@@ -232,8 +232,7 @@ background_update() {
         echo "[后台更新] 🔔 发现新代码: ${LOCAL_HASH:0:7} → ${REMOTE_HASH:0:7}"
         echo "[后台更新] 正在强制拉取更新（丢弃所有本地改动）..."
 
-        # ====== 强制更新：丢弃所有本地改动 ======
-        # 1) 丢弃所有已跟踪文件的本地修改
+        # ====== 强制更新 ======
         git checkout . 2>&1 || true
         # 2) 强制重置到远程分支（丢弃本地提交 + 已暂存改动）
         if ! git reset --hard "origin/$CURRENT_BRANCH" 2>&1; then
@@ -354,7 +353,87 @@ start_service() {
     echo "[警告] 服务启动超时(15秒)，但进程仍在后台运行"
     echo "[提示] 服务可能仍在初始化，稍后请自行访问 http://localhost:$PORT 确认"
     cd ..
-    return 0  # 即使超时也返回0，不阻断后续的后台更新流程
+    return 0
+}
+# --------------------------------------------------
+# 函数：端口监听与自动重启 (守护进程 - 增强版)
+# --------------------------------------------------
+monitor_process() {
+    local MONITOR_PID_FILE="./pro-manager-monitor.pid"
+    local LOG_PATH="$(cd "$(dirname "$0")" && pwd)/pro-manager.log"
+    local ABS_PROJECT_DIR="$(cd "$PROJECT_DIR" && pwd)"
+
+    # 检查是否已有监控进程在运行
+    if [ -f "$MONITOR_PID_FILE" ]; then
+        local OLD_PID=$(cat "$MONITOR_PID_FILE")
+        if kill -0 "$OLD_PID" 2>/dev/null; then
+            echo "[监控] 守护进程已在运行 (PID: $OLD_PID)，跳过启动"
+            return 0
+        fi
+    fi
+
+    echo "[监控] 正在启动守护进程 (每10秒检查端口 $PORT)..."
+
+    # 将主进程的变量传给子进程，避免双引号转义问题和变量丢失
+    export PM_PORT=$PORT
+    export PM_LOG=$LOG_PATH
+    export PM_DIR=$ABS_PROJECT_DIR
+    export PM_PID_FILE=$MONITOR_PID_FILE
+
+    # 使用 nohup 启动后台监控循环
+    # 注意：使用单引号包裹，内部变量通过 $PM_XXX 获取，且重定向放在子进程内部，防止主进程退出时带死子进程
+    nohup bash -c '
+        echo $$ > "$PM_PID_FILE"
+        trap "rm -f $PM_PID_FILE" EXIT INT TERM
+
+        while true; do
+            sleep 10
+
+            # 检测端口：优先 curl，没有 curl 则用 netstat
+            IS_ALIVE=0
+            if command -v curl > /dev/null 2>&1; then
+                if curl -s --connect-timeout 3 http://localhost:$PM_PORT > /dev/null 2>&1; then
+                    IS_ALIVE=1
+                fi
+            else
+                if netstat -tlnp 2>/dev/null | grep -q ":$PM_PORT "; then
+                    IS_ALIVE=1
+                fi
+            fi
+
+            if [ $IS_ALIVE -eq 1 ]; then
+                # 服务正常，不输出日志防止刷屏 (如需调试可将下面这行取消注释)
+                # echo "[守护心跳] $(date) 端口 $PM_PORT 正常" >> "$PM_LOG"
+                continue
+            fi
+
+            echo "[守护] $(date) ❌ 端口 $PM_PORT 无响应，准备重启服务..." >> "$PM_LOG"
+
+            cd "$PM_DIR" || { echo "[守护] 进入目录 $PM_DIR 失败" >> "$PM_LOG"; continue; }
+
+            # 1. 清理残留进程 (兼容 Termux 多种情况)
+            if command -v lsof > /dev/null 2>&1; then
+                lsof -ti:$PM_PORT | xargs kill -9 2>/dev/null
+            elif command -v fuser > /dev/null 2>&1; then
+                fuser -k $PM_PORT/tcp > /dev/null 2>&1
+            else
+                # 兜底：杀掉匹配的 node 进程，防止端口未释放导致新进程起不来
+                pkill -f "node server/index.js" > /dev/null 2>&1
+            fi
+
+            # 等待端口释放
+            sleep 2
+
+            # 2. 重新启动服务
+            nohup node server/index.js >> "$PM_LOG" 2>&1 &
+            echo "[守护] $(date) ✅ 已发送重启命令 (新 PID: $!)" >> "$PM_LOG"
+
+        done
+    ' > /dev/null 2>&1 &
+
+    local BG_PID=$!
+    disown "$BG_PID" 2>/dev/null
+    echo "[监控] 守护进程已启动 (PID: $BG_PID)"
 }
 
 # ================== 主流程 ==================
@@ -385,8 +464,10 @@ main() {
     start_service
 
     # 5. 后台静默更新代码（下次生效）
-    #    ✅ 现在 return 0 不会阻断这里了
     background_update
+
+    # 6. 启动端口监听守护进程
+    monitor_process
 
     echo "[完成] 脚本执行完毕 $(date)"
 }
