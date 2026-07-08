@@ -52,8 +52,9 @@
 <!--android:usesCleartextTraffic="true"-->
         <activity
             android:name=".app.TermuxActivity"
+            android:alwaysRetainTaskState="true"
             android:exported="true"
-            android:configChanges="orientation|screenSize|smallestScreenSize|density|screenLayout|keyboard|keyboardHidden|navigation"
+            android:configChanges="orientation|screenSize|smallestScreenSize|density|screenLayout|keyboard|keyboardHidden|navigation|uiMode|fontScale|locale|layoutDirection"
             android:label="@string/application_name"
             android:launchMode="singleTask"
             android:resizeableActivity="true"

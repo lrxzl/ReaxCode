@@ -1,7 +1,4 @@
 package com.termux.app;
-
-import android.annotation.SuppressLint;
-import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
@@ -26,6 +23,8 @@ import android.webkit.WebResourceRequest;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 import android.view.ViewGroup;
+import android.view.ViewParent;
+
 import android.view.WindowManager;
 import android.widget.EditText;
 import android.widget.ImageButton;
@@ -65,6 +64,8 @@ import com.termux.terminal.TerminalSession;
 import com.termux.terminal.TerminalSessionClient;
 import com.termux.view.TerminalView;
 import com.termux.view.TerminalViewClient;
+import android.annotation.SuppressLint;
+
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -73,6 +74,8 @@ import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.viewpager.widget.ViewPager;
 
 import java.util.Arrays;
+
+import android.app.AlertDialog;
 
 import cn.net.xiangxiang.seeker.WebViewActivity;
 import cn.net.xiangxiang.seeker.JavaBridge;
@@ -164,10 +167,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     Toast mLastToast;
 
-    /** HomeWebView 相关 */
-    private WebView mHomeWebView;
-
-    /** 控制启动后默认显示 WebView 还是终端，true=WebView, false=终端 */
+    /** HomeWebView 鐩稿叧 */
+private WebView mHomeWebView;
+    private HomeWebViewFragment mHomeWebViewFragment;
+    /** 鎺у埗鍚姩鍚庨粯璁ゆ樉绀?WebView 杩樻槸缁堢锛宼rue=WebView, false=缁堢 */
     private boolean mStartWithWebView = true;
     private TermuxManager mHomeWebViewTermuxManager;
     private JavaBridge mHomeWebViewJavaBridge;
@@ -240,37 +243,55 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         setContentView(R.layout.activity_termux);
 
-        // ===== 初始化 HomeWebView =====
+
+// ===== 鍒濆鍖?HomeWebView -> 鏀圭敤 Fragment =====
         mHomeWebViewTermuxManager = TermuxManager.getInstance();
         mHomeWebViewTermuxManager.init(this);
 
         FrontendJavaTools frontendJavaTools = new FrontendJavaTools();
 
+        // 浣跨敤 Fragment 绠＄悊 WebView锛屽疄鐜?setRetainInstance(true)
+        mHomeWebViewFragment = (HomeWebViewFragment) getSupportFragmentManager()
+                .findFragmentByTag("home_webview");
+        if (mHomeWebViewFragment == null) {
+            mHomeWebViewFragment = new HomeWebViewFragment();
+            Bundle args = new Bundle();
+            args.putString("url", "https://seeker-vue.xiangxiang.net.cn");
+            mHomeWebViewFragment.setArguments(args);
+            getSupportFragmentManager().beginTransaction()
+                    .replace(R.id.home_webview_container, mHomeWebViewFragment, "home_webview")
+                    .commitNow();
+        }
 
-        mHomeWebView = findViewById(R.id.home_webview);
-        configureHomeWebView(mHomeWebView);
+        // 璁剧疆 WebView 灏辫鍥炶皟锛岄伩鍏嶅湪瑙嗗浘閲嶅缓瀹屾垚鍓嶈闂?WebView
+        mHomeWebViewFragment.setOnWebViewReadyListener(webView -> {
+            mHomeWebView = webView;
+            if (mHomeWebViewJavaBridge == null) {
+                mHomeWebViewJavaBridge = new JavaBridge(this, frontendJavaTools, webView);
+                webView.addJavascriptInterface(mHomeWebViewJavaBridge, "JavaBridge");
+            }
+            if (savedInstanceState == null) {
+                if (webView.getUrl() == null) {
+                    webView.loadUrl("https://seeker-vue.xiangxiang.net.cn");
+                }
+            }
+            // 鏍规嵁 mStartWithWebView 鎺у埗 WebView 鍙鎬?
+            mIsShowingWebView = mStartWithWebView;
+            webView.setVisibility(mStartWithWebView ? View.VISIBLE : View.GONE);
 
-        mHomeWebViewJavaBridge = new JavaBridge(this, frontendJavaTools, mHomeWebView);
-        mHomeWebView.addJavascriptInterface(mHomeWebViewJavaBridge, "JavaBridge");
-//        mHomeWebView.loadUrl("http://192.168.1.129:8084");
-        mHomeWebView.loadUrl("https://seeker-vue.xiangxiang.net.cn");
-//        mHomeWebView.loadUrl("file:///android_asset/home.html");
+            // ===== 在 WebView 就绪后初始化浮动切换按钮 =====
+            if (mFloatingToggle == null) {
+                mFloatingToggle = new FloatingToggleButton(TermuxActivity.this);
+                mFloatingToggle.setOnToggleClickListener(isShowingWebView -> toggleWebViewTerminal());
+                ViewGroup contentView = findViewById(android.R.id.content);
+                int btnSize = (int) (48 * getResources().getDisplayMetrics().density + 0.5f);
+                FrameLayout.LayoutParams btnParams = new FrameLayout.LayoutParams(btnSize, btnSize);
+                contentView.addView(mFloatingToggle, btnParams);
+                mFloatingToggle.post(() -> mFloatingToggle.snapToEdge(true));
+            }
+            mFloatingToggle.updateState(mIsShowingWebView);
+        });
 
-
-        // 根据 mStartWithWebView 控制 WebView 可见性
-        mIsShowingWebView = mStartWithWebView;
-
-        mHomeWebView.setVisibility(mStartWithWebView ? View.VISIBLE : View.GONE);
-
-        // 初始化悬浮切换按钮
-        mFloatingToggle = new FloatingToggleButton(this);
-        mFloatingToggle.updateState(mIsShowingWebView);
-        mFloatingToggle.setOnToggleClickListener(isShowingWebView -> toggleWebViewTerminal());
-        ViewGroup contentView = findViewById(android.R.id.content);
-        int btnSize = (int) (48 * getResources().getDisplayMetrics().density + 0.5f);
-        FrameLayout.LayoutParams btnParams = new FrameLayout.LayoutParams(btnSize, btnSize);
-        contentView.addView(mFloatingToggle, btnParams);
-        mFloatingToggle.post(() -> mFloatingToggle.snapToEdge(true));
 
 
         // Load termux shared preferences
@@ -400,14 +421,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         removeTermuxActivityRootViewGlobalLayoutListener();
 
         unregisterTermuxActivityBroadcastReceiver();
+        if (mHomeWebView != null) mHomeWebView.onPause();
         getDrawer().closeDrawers();
 
-        if (mHomeWebView != null) mHomeWebView.onPause();
     }
 
     @Override
     public void onDestroy() {
         super.onDestroy();
+
+        boolean isFinishing = isFinishing();
 
         Logger.logDebug(LOG_TAG, "onDestroy");
 
@@ -424,16 +447,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // ignore.
         }
 
-        // 销毁 TermuxManager sessions
+        // 閿€姣?TermuxManager sessions
         if (mHomeWebViewTermuxManager != null) {
             mHomeWebViewTermuxManager.destroyAllSessions();
         }
 
-        // 清理 WebView
+        // 清除 WebView，仅当应用真正退出时销毁
+        if (isFinishing()) {
+            if (mHomeWebView != null) {
+                mHomeWebView.removeAllViews();
+                mHomeWebView.destroy();
+                mHomeWebView = null;
+            }
+        } else {
+        // Activity 重建时（配置变更等），从旧布局中移除但不销毁
         if (mHomeWebView != null) {
-            mHomeWebView.removeAllViews();
-            mHomeWebView.destroy();
-            mHomeWebView = null;
+                ViewParent parent = mHomeWebView.getParent();
+                if (parent instanceof ViewGroup) {
+                    ((ViewGroup) parent).removeView(mHomeWebView);
+                }
+            }
         }
 
     }
@@ -444,7 +477,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         super.onSaveInstanceState(savedInstanceState);
         saveTerminalToolbarTextInput(savedInstanceState);
         savedInstanceState.putBoolean(ARG_ACTIVITY_RECREATED, true);
+        if (mHomeWebView != null) {
+            mHomeWebView.saveState(savedInstanceState);
+        }
+
     }
+
+    @Override
+    protected void onRestoreInstanceState(@NonNull Bundle savedInstanceState) {
+        super.onRestoreInstanceState(savedInstanceState);
+        Logger.logVerbose(LOG_TAG, "onRestoreInstanceState");
+
+        // 鎭㈠ WebView 鐘舵€侊紝閬垮厤閲嶆柊 loadUrl
+        if (mHomeWebView != null) {
+            mHomeWebView.restoreState(savedInstanceState);
+        }
+    }
+
 
 
 
@@ -500,8 +549,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Update the {@link TerminalSession} and {@link TerminalEmulator} clients.
         mTermuxService.setTermuxTerminalSessionClient(mTermuxTerminalSessionActivityClient);
 
-        // WebView已在onCreate中初始化，不再跳转到WebViewActivity
-        // 延迟1秒后启动 WebViewActivity
+        // WebView宸插湪onCreate涓垵濮嬪寲锛屼笉鍐嶈烦杞埌WebViewActivity
+        // 寤惰繜1绉掑悗鍚姩 WebViewActivity
         /*new android.os.Handler().postDelayed(() -> {
             if (!isFinishing() && !isDestroyed()) {
                 Intent intent1 = new Intent(TermuxActivity.this, WebViewActivity.class);
@@ -544,7 +593,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
 
 
-    /** 悬浮切换按钮 */
+    /** 鎮诞鍒囨崲鎸夐挳 */
     private FloatingToggleButton mFloatingToggle;
     private boolean mIsShowingWebView = true;
 
@@ -738,8 +787,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * 配置 HomeWebView 设置
-     * @param webView 要配置的WebView实例
+     * 閰嶇疆 HomeWebView 璁剧疆
+     * @param webView 瑕侀厤缃殑WebView瀹炰緥
      */
     @SuppressLint("SetJavaScriptEnabled")
     private void configureHomeWebView(WebView webView) {
@@ -778,7 +827,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
-                Logger.logDebug(LOG_TAG, "HomeWebView页面加载完成: " + url);
+                Logger.logDebug(LOG_TAG, "HomeWebView椤甸潰鍔犺浇瀹屾垚: " + url);
                 view.loadUrl("javascript:if(typeof onBridgeReady === 'function') onBridgeReady();");
 
                 view.evaluateJavascript(JavaBridge.getBridgeJsCode(), null);
@@ -788,16 +837,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             public void onReceivedError(WebView view, int errorCode,
                                         String description, String failingUrl) {
                 super.onReceivedError(view, errorCode, description, failingUrl);
-                Logger.logError(LOG_TAG, "HomeWebView页面加载错误: " + description);
+                Logger.logError(LOG_TAG, "HomeWebView椤甸潰鍔犺浇閿欒: " + description);
                 Toast.makeText(TermuxActivity.this,
-                    "页面加载失败: " + description, Toast.LENGTH_SHORT).show();
+                    "椤甸潰鍔犺浇澶辫触: " + description, Toast.LENGTH_SHORT).show();
             }
         });
 
         mHomeFileChooser = new WebViewConfig.FileChooserHelper();
         webView.setWebChromeClient(mHomeFileChooser.createWebChromeClient());
 
-        Logger.logDebug(LOG_TAG, "HomeWebView配置完成");
+        Logger.logDebug(LOG_TAG, "HomeWebView閰嶇疆瀹屾垚");
     }
     /** Show a toast and dismiss the last one if still visible. */
     public void showToast(String text, boolean longDuration) {
@@ -1203,3 +1252,4 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
 }
+

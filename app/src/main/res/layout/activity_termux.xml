@@ -102,8 +102,8 @@
             android:background="@color/black"
             android:layout_alignParentBottom="true" />
 
-        <WebView
-            android:id="@+id/home_webview"
+<FrameLayout
+            android:id="@+id/home_webview_container"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:layout_alignParentTop="true"
