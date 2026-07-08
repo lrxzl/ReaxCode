@@ -89,23 +89,20 @@ public class HomeWebViewFragment extends Fragment {
         return mWebView;
     }
 
-    /** 前台时注入 - 启动静音音频 */
+    /** 后台时注入 - 启动保活音频 */
     private static final String START_AUDIO_JS =
         "(function(){" +
         "  if(window.__kaRunning) return;" +
         "  window.__kaRunning=true;" +
         "  var ctx=new(window.AudioContext||window.webkitAudioContext)();" +
         "  var osc=ctx.createOscillator();" +
-        "  osc.type='sine';" +
-        "  osc.frequency.value=440;" +
-        "  var g=ctx.createGain();" +
-        "  g.gain.value=0.3;" +
-        "  osc.connect(g);g.connect(ctx.destination);" +
-        "  osc.start(0);" +
+        "  osc.type='sine';osc.frequency.value=1;" +
+        "  var g=ctx.createGain();g.gain.value=0.00;" +
+        "  osc.connect(g);g.connect(ctx.destination);osc.start(0);" +
         "  window.__kaOsc=osc;window.__kaCtx=ctx;" +
         "})();";
 
-    /** 后台时注入 - 停止音频 */
+    /** 回到前台时注入 - 停止音频 */
     private static final String STOP_AUDIO_JS =
         "(function(){" +
         "  try{" +
@@ -114,6 +111,30 @@ public class HomeWebViewFragment extends Fragment {
         "  }catch(e){}" +
         "  window.__kaRunning=false;" +
         "})();";
+
+    /** 重启音频（关闭再打开，由Service定时调用） */
+    private static final String RESTART_AUDIO_JS =
+        "(function(){" +
+        "  try{" +
+        "    if(window.__kaOsc){window.__kaOsc.stop();window.__kaOsc=null;}" +
+        "    if(window.__kaCtx){window.__kaCtx.close();window.__kaCtx=null;}" +
+        "  }catch(e){}" +
+        "  window.__kaRunning=false;" +
+        "  var ctx=new(window.AudioContext||window.webkitAudioContext)();" +
+        "  var osc=ctx.createOscillator();" +
+        "  osc.type='sine';osc.frequency.value=1;" +
+        "  var g=ctx.createGain();g.gain.value=0.00;" +
+        "  osc.connect(g);g.connect(ctx.destination);osc.start(0);" +
+        "  window.__kaOsc=osc;window.__kaCtx=ctx;" +
+        "  window.__kaRunning=true;" +
+        "})();";
+
+    /** 由Service定时调用 - 重启音频防检测 */
+    public void restartKeepAlive() {
+        if (mWebView != null) {
+            mWebView.evaluateJavascript(RESTART_AUDIO_JS, null);
+        }
+    }
 
     /** 后台时调用 - 启动静音音频保活 */
     public void startKeepAlive() {

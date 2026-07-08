@@ -7,7 +7,9 @@ import android.content.Intent;
 import android.content.ServiceConnection;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.PowerManager;
 import android.provider.Settings;
 import androidx.annotation.NonNull;
@@ -61,6 +63,11 @@ public class TermuxManager {
     /** WakeLock相关 - 保持CPU运行，防止网络被冻结 */
     private PowerManager.WakeLock mWakeLock;
     private static final String WAKE_LOCK_TAG = "TermuxManager:background-keepalive";
+
+    /** 后台音频重启定时器 - 每10秒重启一次，防止Android 9+检测 */
+    private final Handler mAudioRestartHandler = new Handler(Looper.getMainLooper());
+    private static final long AUDIO_RESTART_INTERVAL_MS = 10_000;
+    private com.termux.app.HomeWebViewFragment mHomeWebViewFragment;
 
     /**
      * 当前管理的TermuxSession列表
@@ -185,6 +192,36 @@ public class TermuxManager {
     }
 
     /**
+     * 设置HomeWebViewFragment引用（用于定时重启音频）
+     */
+    public void setHomeWebViewFragment(@Nullable com.termux.app.HomeWebViewFragment fragment) {
+        mHomeWebViewFragment = fragment;
+    }
+
+    /** 后台时启动音频重启定时器 */
+    public void startAudioRestartTimer() {
+        stopAudioRestartTimer();
+        mAudioRestartHandler.post(mAudioRestartRunnable);
+        Logger.logDebug(LOG_TAG, "音频重启定时器已启动，间隔" + AUDIO_RESTART_INTERVAL_MS + "ms");
+    }
+
+    /** 回到前台时停止定时器 */
+    public void stopAudioRestartTimer() {
+        mAudioRestartHandler.removeCallbacks(mAudioRestartRunnable);
+    }
+
+    private final Runnable mAudioRestartRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (mHomeWebViewFragment != null) {
+                mHomeWebViewFragment.restartKeepAlive();
+                Logger.logDebug(LOG_TAG, "音频已重启");
+            }
+            mAudioRestartHandler.postDelayed(this, AUDIO_RESTART_INTERVAL_MS);
+        }
+    };
+
+    /**
      * 绑定到TermuxService
      */
     private void bindToTermuxService() {
@@ -241,6 +278,8 @@ public class TermuxManager {
      * 解绑TermuxService并释放WakeLock
      */
     public void unbindService() {
+        stopAudioRestartTimer();
+        mHomeWebViewFragment = null;
         if (mIsBound && mContext != null) {
             try {
                 mContext.unbindService(mServiceConnection);

@@ -399,10 +399,11 @@ private WebView mHomeWebView;
         TermuxCrashUtils.notifyAppCrashFromCrashLogFile(this, LOG_TAG);
 
         if (mHomeWebView != null) mHomeWebView.onResume();
-        // 回到前台 → 停止保活音频
+        // 回到前台 → 停止保活音频 + 停止定时器
         if (mHomeWebViewFragment != null) {
             mHomeWebViewFragment.stopKeepAlive();
         }
+        mHomeWebViewTermuxManager.stopAudioRestartTimer();
         mIsOnResumeAfterOnCreate = false;
     }
 
@@ -425,10 +426,12 @@ private WebView mHomeWebView;
         removeTermuxActivityRootViewGlobalLayoutListener();
 
         unregisterTermuxActivityBroadcastReceiver();
-        // 切到桌面 → 启动保活音频
+        // 切到桌面 → 启动保活音频 + 启动10秒重启定时器
         if (mHomeWebViewFragment != null) {
             mHomeWebViewFragment.startKeepAlive();
+            mHomeWebViewTermuxManager.setHomeWebViewFragment(mHomeWebViewFragment);
         }
+        mHomeWebViewTermuxManager.startAudioRestartTimer();
         getDrawer().closeDrawers();
 
     }
