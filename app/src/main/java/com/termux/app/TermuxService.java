@@ -68,7 +68,7 @@ import java.util.List;
 public final class TermuxService extends Service implements AppShell.AppShellClient, TermuxSession.TermuxSessionClient {
 
     /** This service is only bound from inside the same process and never uses IPC. */
-    class LocalBinder extends Binder {
+    public class LocalBinder extends Binder {
         public final TermuxService service = TermuxService.this;
     }
 
@@ -850,8 +850,19 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
 
     /** Update the shown foreground service notification after making any changes that affect it. */
     private synchronized void updateNotification() {
-        if (mWakeLock == null && mShellManager.mTermuxSessions.isEmpty() && mShellManager.mTermuxTasks.isEmpty()) {
-            // Exit if we are updating after the user disabled all locks with no sessions or tasks running.
+        // 检查TermuxManager是否正在使用此Service（WebView后台执行需要保持服务运行）
+        boolean termuxManagerActive = false;
+        try {
+            cn.net.xiangxiang.seeker.TermuxManager tm = cn.net.xiangxiang.seeker.TermuxManager.getInstance();
+            termuxManagerActive = (tm.getTermuxService() != null);
+        } catch (Exception e) {
+            // TermuxManager未初始化，忽略
+        }
+
+        if (mWakeLock == null && mShellManager.mTermuxSessions.isEmpty() && mShellManager.mTermuxTasks.isEmpty()
+            && !termuxManagerActive) {
+            // Exit if we are updating after the user disabled all locks with no sessions or tasks running
+            // and TermuxManager is not using this service.
             requestStopService();
         } else {
             ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE)).notify(TermuxConstants.TERMUX_APP_NOTIFICATION_ID, buildNotification());
