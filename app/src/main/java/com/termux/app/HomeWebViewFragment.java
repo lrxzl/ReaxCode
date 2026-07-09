@@ -11,6 +11,7 @@ import android.webkit.WebSettings;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
+import cn.net.xiangxiang.seeker.JavaBridgeConstants;
 
 public class HomeWebViewFragment extends Fragment {
 
@@ -43,7 +44,9 @@ public class HomeWebViewFragment extends Fragment {
             mUrl = getArguments().getString("url");
         }
         if (mUrl == null) {
-            mUrl = "https://seeker-vue.xiangxiang.net.cn";
+            mUrl = "http://192.168.1.129:8084";
+//            mUrl = "https://seeker-vue.xiangxiang.net.cn";
+//            mUrl = "https://seeker-vue.xiangxiang.net.cn";
         }
     }
 
@@ -76,6 +79,8 @@ public class HomeWebViewFragment extends Fragment {
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
+                // ===== 注入桥接 JS，使前端可以调用 callNative/callNativeData =====
+                view.evaluateJavascript(JavaBridgeConstants.BRIDGE_JS, null);
             }
         });
         mWebView.setWebChromeClient(new WebChromeClient());

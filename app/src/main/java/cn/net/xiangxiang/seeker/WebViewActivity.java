@@ -18,6 +18,7 @@ import com.termux.shared.logger.Logger;
 
 import cn.net.xiangxiang.reaction.frontend.tools.FrontendJavaTools;
 import cn.net.xiangxiang.reaction.frontend.WebViewConfig;
+import android.webkit.WebResourceRequest;
 
 
 /**
@@ -86,7 +87,7 @@ private static final String LOG_TAG = "WebViewActivity";
         setContentView(mWebView, params);
 
         // 优先使用 Intent 传入的 URL（如 NewWindowInterceptor 拦截的 URL），否则使用默认地址
-        final String DEFAULT_URL = "https://seeker-vue.xiangxiang.net.cn";
+        final String DEFAULT_URL = "about:blank";
         final String loadUrl = WebViewConfig.getUrlFromIntent(getIntent(), DEFAULT_URL);
         runOnUiThread(() -> {
             mWebView.loadUrl(loadUrl);
@@ -125,7 +126,31 @@ private static final String LOG_TAG = "WebViewActivity";
         // 启用缓存
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
 
-        webView.setWebViewClient(PaymentSchemeHandler.createWebViewClient(this));
+        webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                if (PaymentSchemeHandler.handlePaymentUrl(WebViewActivity.this, view, url)) {
+                    return true;
+                }
+                return super.shouldOverrideUrlLoading(view, url);
+            }
+
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                if (request != null && request.getUrl() != null) {
+                    String url = request.getUrl().toString();
+                    if (PaymentSchemeHandler.handlePaymentUrl(WebViewActivity.this, view, url)) {
+                        return true;
+                    }
+                }
+                return super.shouldOverrideUrlLoading(view, request);
+            }
+
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                super.onPageFinished(view, url);
+            }
+        });
 
         // 创建文件选择辅助
         mFileChooser = new WebViewConfig.FileChooserHelper();
