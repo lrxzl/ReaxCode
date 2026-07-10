@@ -19,6 +19,10 @@ import android.widget.FrameLayout;
 import androidx.appcompat.app.AlertDialog;
 
 import com.termux.shared.logger.Logger;
+import android.graphics.Color;
+import android.graphics.Typeface;
+import android.util.TypedValue;
+import android.widget.TextView;
 
 /**
  * WebView 统一配置
@@ -44,6 +48,19 @@ import com.termux.shared.logger.Logger;
 public final class WebViewConfig {
 
     private static final String LOG_TAG = "WebViewConfig";
+
+    /** 创建白色背景的标题 TextView */
+    private static TextView createWhiteTitleView(Context context, String title) {
+        TextView tv = new TextView(context);
+        tv.setText(title);
+        tv.setBackgroundColor(Color.WHITE);
+        tv.setTextColor(Color.BLACK);
+        int padding = (int) (16 * context.getResources().getDisplayMetrics().density);
+        tv.setPadding(padding, padding / 2, padding, padding / 2);
+        tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
+        tv.setTypeface(null, Typeface.BOLD);
+        return tv;
+    }
 
     /** 文件选择请求码 */
     public static final int FILE_CHOOSER_REQUEST_CODE = 10010;
@@ -163,6 +180,7 @@ public final class WebViewConfig {
                 @Override
                 public boolean onJsAlert(WebView view, String url, String message, JsResult result) {
                     new AlertDialog.Builder(view.getContext())
+.setCustomTitle(createWhiteTitleView(view.getContext(), "消息提示"))
                         .setMessage(message)
                         .setPositiveButton(android.R.string.ok, (dialog, which) -> result.confirm())
                         .setCancelable(false)
@@ -173,6 +191,7 @@ public final class WebViewConfig {
                 @Override
                 public boolean onJsConfirm(WebView view, String url, String message, JsResult result) {
                     new AlertDialog.Builder(view.getContext())
+.setCustomTitle(createWhiteTitleView(view.getContext(), "确认操作"))
                         .setMessage(message)
                         .setPositiveButton(android.R.string.ok, (dialog, which) -> result.confirm())
                         .setNegativeButton(android.R.string.cancel, (dialog, which) -> result.cancel())
@@ -193,6 +212,7 @@ public final class WebViewConfig {
                     container.setPadding(padding, padding / 2, padding, 0);
 
                     new AlertDialog.Builder(view.getContext())
+.setCustomTitle(createWhiteTitleView(view.getContext(), "输入操作"))
                         .setMessage(message)
                         .setView(container)
                         .setPositiveButton(android.R.string.ok, (dialog, which) -> result.confirm(input.getText().toString()))
@@ -203,31 +223,31 @@ public final class WebViewConfig {
                 }
 
                 // Android 5.0+
-                @Override
-                public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback,
-                                                 FileChooserParams fileChooserParams) {
-                    if (mFilePathCallback != null) {
-                        mFilePathCallback.onReceiveValue(null);
-                    }
-                    mFilePathCallback = filePathCallback;
-
-                    Intent intent = createFileChooserIntent(fileChooserParams);
-                    Activity activity = getActivityFromWebView(webView);
-                    if (activity != null) {
-                        try {
-                            activity.startActivityForResult(
-                                Intent.createChooser(intent, "选择文件"),
-                                FILE_CHOOSER_REQUEST_CODE);
-                            Logger.logDebug(LOG_TAG, "文件选择器已启动");
-                            return true;
-                        } catch (Exception e) {
-                            Logger.logError(LOG_TAG, "启动文件选择器失败: " + e.getMessage());
-                            mFilePathCallback.onReceiveValue(null);
-                            mFilePathCallback = null;
-                        }
-                    }
-                    return false;
-                }
+//                @Override
+//                public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback,
+//                                                 FileChooserParams fileChooserParams) {
+//                    if (mFilePathCallback != null) {
+//                        mFilePathCallback.onReceiveValue(null);
+//                    }
+//                    mFilePathCallback = filePathCallback;
+//
+//                    Intent intent = createFileChooserIntent(fileChooserParams);
+//                    Activity activity = getActivityFromWebView(webView);
+//                    if (activity != null) {
+//                        try {
+//                            activity.startActivityForResult(
+//                                Intent.createChooser(intent, "选择文件"),
+//                                FILE_CHOOSER_REQUEST_CODE);
+//                            Logger.logDebug(LOG_TAG, "文件选择器已启动");
+//                            return true;
+//                        } catch (Exception e) {
+//                            Logger.logError(LOG_TAG, "启动文件选择器失败: " + e.getMessage());
+//                            mFilePathCallback.onReceiveValue(null);
+//                            mFilePathCallback = null;
+//                        }
+//                    }
+//                    return false;
+//                }
             };
         }
 
