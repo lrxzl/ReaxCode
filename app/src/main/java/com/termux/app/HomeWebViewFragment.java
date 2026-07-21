@@ -84,7 +84,7 @@ public class HomeWebViewFragment extends Fragment {
             }
         });
         WebViewConfig.FileChooserHelper fileChooserHelper = new WebViewConfig.FileChooserHelper();
-        mWebView.setWebChromeClient(fileChooserHelper.createWebChromeClient());
+        mWebView.setWebChromeClient(fileChooserHelper.createWebChromeClient(getActivity()));
 
         // 通知回调
         if (mWebViewReadyListener != null) {

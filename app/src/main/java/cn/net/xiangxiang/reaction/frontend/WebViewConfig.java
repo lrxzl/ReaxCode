@@ -8,6 +8,7 @@ import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
 import android.webkit.JsPromptResult;
+import android.webkit.PermissionRequest;
 import android.webkit.JsResult;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
@@ -23,6 +24,7 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.util.TypedValue;
 import android.widget.TextView;
+import java.util.Arrays;
 
 /**
  * WebView 统一配置
@@ -39,7 +41,7 @@ import android.widget.TextView;
  *
  * // 3. 设置文件选择功能（需要当前 Activity）
  * WebViewConfig.FileChooserHelper fileChooser = new WebViewConfig.FileChooserHelper();
- * mWebView.setWebChromeClient(fileChooser.createWebChromeClient());
+ * mWebView.setWebChromeClient(fileChooser.createWebChromeClient(activity));
  *
  * // 4. 在 onActivityResult 中转发结果
  * if (fileChooser.onActivityResult(requestCode, resultCode, data)) return;
@@ -164,12 +166,16 @@ public final class WebViewConfig {
     public static class FileChooserHelper {
 
         private ValueCallback<Uri[]> mFilePathCallback;
+        private Activity mActivity;
 
         /**
          * 创建带文件选择功能的 WebChromeClient。
          * 同时保留 JS 控制台日志输出。
+         *
+         * @param activity 当前 Activity，用于运行时权限请求
          */
-        public WebChromeClient createWebChromeClient() {
+        public WebChromeClient createWebChromeClient(Activity activity) {
+            mActivity = activity;
             return new WebChromeClient() {
                 @Override
                 public void onConsoleMessage(String message, int lineNumber, String sourceID) {
@@ -222,7 +228,21 @@ public final class WebViewConfig {
                     return true;
                 }
 
-                // Android 5.0+
+                // ===== HTML5 权限请求处理（摄像头、麦克风、定位等）=====
+                @Override
+                public void onPermissionRequest(PermissionRequest request) {
+                    Logger.logDebug(LOG_TAG, "onPermissionRequest: " + request.getOrigin() + " resources: " + Arrays.toString(request.getResources()));
+                    // 按需请求运行时权限
+                    if (mActivity instanceof com.termux.app.TermuxActivity) {
+                        if (((com.termux.app.TermuxActivity) mActivity).requestCameraMicPermission(request)) {
+                            request.grant(request.getResources());
+                        }
+                    } else {
+                        request.grant(request.getResources());
+                    }
+                }
+
+
 //                @Override
 //                public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback,
 //                                                 FileChooserParams fileChooserParams) {

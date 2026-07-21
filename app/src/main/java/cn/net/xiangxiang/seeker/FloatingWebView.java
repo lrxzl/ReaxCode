@@ -18,6 +18,8 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
+import android.webkit.PermissionRequest;
+import java.util.Arrays;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
@@ -26,6 +28,8 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+
+import com.termux.shared.logger.Logger;
 
 import java.util.Random;
 
@@ -151,8 +155,24 @@ public class FloatingWebView extends FrameLayout {
         settings.setDisplayZoomControls(false);
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
+
             public void onReceivedTitle(WebView view, String title) {
                 titleText.setText(title);
+            }
+
+            // ===== HTML5 权限请求处理 =====
+            @Override
+            public void onPermissionRequest(PermissionRequest request) {
+                Logger.logDebug("FloatingWebView", "onPermissionRequest: " + request.getOrigin() + " resources: " + java.util.Arrays.toString(request.getResources()));
+                // 按需请求运行时权限
+                Activity activity = getActivity();
+                if (activity instanceof com.termux.app.TermuxActivity) {
+                    if (((com.termux.app.TermuxActivity) activity).requestCameraMicPermission(request)) {
+                        request.grant(request.getResources());
+                    }
+                } else {
+                    request.grant(request.getResources());
+                }
             }
 
             @Override

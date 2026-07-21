@@ -155,7 +155,7 @@ private static final String LOG_TAG = "WebViewActivity";
         // 创建文件选择辅助
         mFileChooser = new WebViewConfig.FileChooserHelper();
 
-        webView.setWebChromeClient(mFileChooser.createWebChromeClient());
+        webView.setWebChromeClient(mFileChooser.createWebChromeClient(this));
         
         Logger.logDebug(LOG_TAG, "WebView配置完成");
     }

@@ -1,4 +1,5 @@
 package com.termux.app;
+import android.Manifest;
 import android.content.ActivityNotFoundException;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
@@ -6,8 +7,11 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ServiceConnection;
+import android.content.pm.PackageManager;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.webkit.PermissionRequest;
 import android.os.IBinder;
 import android.view.ContextMenu;
 import android.view.ContextMenu.ContextMenuInfo;
@@ -176,6 +180,9 @@ private WebView mHomeWebView;
     private JavaBridge mHomeWebViewJavaBridge;
     private WebViewConfig.FileChooserHelper mHomeFileChooser;
 
+    /** 等待运行时权限结果的 WebView PermissionRequest */
+    private PermissionRequest mPendingPermissionRequest;
+
     /**
      * If between onResume() and onStop(). Note that only one session is in the foreground of the terminal view at the
      * time, so if the session causing a change is not in the foreground it should probably be treated as background.
@@ -294,7 +301,8 @@ private WebView mHomeWebView;
             mFloatingToggle.updateState(mIsShowingWebView);
         });
 
-
+        // 请求摄像头和麦克风运行时权限（WebView HTML5 getUserMedia 需要）
+        // requestCameraMicPermission();
 
         // Load termux shared preferences
         // This will also fail if TermuxConstants.TERMUX_PACKAGE_NAME does not equal applicationId
@@ -856,7 +864,7 @@ private WebView mHomeWebView;
         });
 
         mHomeFileChooser = new WebViewConfig.FileChooserHelper();
-        webView.setWebChromeClient(mHomeFileChooser.createWebChromeClient());
+        webView.setWebChromeClient(mHomeFileChooser.createWebChromeClient(this));
 
         Logger.logDebug(LOG_TAG, "HomeWebView閰嶇疆瀹屾垚");
     }
@@ -1057,7 +1065,48 @@ private WebView mHomeWebView;
         Logger.logVerbose(LOG_TAG, "onRequestPermissionsResult: requestCode: " + requestCode + ", permissions: "  + Arrays.toString(permissions) + ", grantResults: "  + Arrays.toString(grantResults));
         if (requestCode == PermissionUtils.REQUEST_GRANT_STORAGE_PERMISSION) {
             requestStoragePermission(true);
+        } else if (requestCode == PermissionUtils.REQUEST_GRANT_CAMERA_MIC_PERMISSION) {
+            if (mPendingPermissionRequest != null) {
+                boolean allGranted = true;
+                for (int result : grantResults) {
+                    if (result != PackageManager.PERMISSION_GRANTED) {
+                        allGranted = false;
+                        break;
+                    }
+                }
+                if (allGranted) {
+                    mPendingPermissionRequest.grant(mPendingPermissionRequest.getResources());
+                } else {
+                    mPendingPermissionRequest.deny();
+                }
+                mPendingPermissionRequest = null;
+            }
         }
+    }
+
+    /**
+     * 请求摄像头和麦克风运行时权限。
+     * WebView 的 HTML5 getUserMedia() 需要这些权限才能工作。
+     * 如果已授权则直接返回 true，否则弹出系统权限弹窗并在授权后自动 grant WebView 权限。
+     */
+    public boolean requestCameraMicPermission(PermissionRequest webviewPermissionRequest) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            String[] perms = {Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO};
+            boolean needRequest = false;
+            for (String perm : perms) {
+                if (checkSelfPermission(perm) != PackageManager.PERMISSION_GRANTED) {
+                    needRequest = true;
+                    break;
+                }
+            }
+            if (needRequest) {
+                // 保存 WebView 的 PermissionRequest，等系统权限弹窗返回后 grant
+                mPendingPermissionRequest = webviewPermissionRequest;
+                requestPermissions(perms, PermissionUtils.REQUEST_GRANT_CAMERA_MIC_PERMISSION);
+                return false; // 尚未授权，稍后通过 onRequestPermissionsResult 处理
+            }
+        }
+        return true; // 已授权
     }
 
 
