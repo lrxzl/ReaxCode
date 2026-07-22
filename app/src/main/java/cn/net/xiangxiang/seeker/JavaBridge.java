@@ -71,7 +71,13 @@ public class JavaBridge {
         this.tools = tools;
         this.activity = activity;
         this.homeWebView = homeWebView;
+
+        // 给 invokeMethod 添加一个http-api接口服务
+        new InvokeHttpApi(this);
+
     }
+
+
 
     // ==================== 简单接口（无需回调） ====================
 
