@@ -1,124 +1,133 @@
 package cn.net.xiangxiang.seeker;
 
+import android.util.Log;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
-import java.io.*;
-import java.net.ServerSocket;
-import java.net.Socket;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.logging.Logger;
 
-public class InvokeHttpApi {
-    private static final Logger log = Logger.getLogger(InvokeHttpApi.class.getName());
-    private static final ObjectMapper mapper = new ObjectMapper();
+import fi.iki.elonen.NanoHTTPD;
+
+public class InvokeHttpApi extends NanoHTTPD {
+
+    private static final String TAG = "InvokeHttpApi";
     private final JavaBridge javaBridge;
-    private volatile ServerSocket serverSocket;
-    private volatile boolean running;
+    private final ObjectMapper mapper = new ObjectMapper();
 
-    public InvokeHttpApi(JavaBridge javaBridge) {
+    public InvokeHttpApi(JavaBridge javaBridge, int port) throws IOException {
+        super(port);
         this.javaBridge = javaBridge;
-        startServer();
+        start(SOCKET_READ_TIMEOUT, false);
+        Log.i(TAG, "Server started on port " + port);
     }
 
-    private void startServer() {
-        new Thread(() -> {
-            try {
-                serverSocket = new ServerSocket(9876);
-                running = true;
-                log.info("InvokeHttpApi server started on port 9876");
-                while (running) {
-                    try {
-                        Socket client = serverSocket.accept();
-                        handleClient(client);
-                    } catch (Exception e) {
-                        if (running) {
-                            log.warning("Accept error: " + e.getMessage());
-                        }
-                    }
-                }
-            } catch (IOException e) {
-                log.severe("Could not start server: " + e.getMessage());
-            }
-        }, "InvokeHttpApi").start();
-    }
+    @Override
+    public Response serve(IHTTPSession session) {
+        // 关键：处理 CORS 预检请求 (OPTIONS)
+        if (Method.OPTIONS == session.getMethod()) {
+            return corsEnabledResponse(newFixedLengthResponse(""));
+        }
 
+        // 只允许 POST + /invokeMethod
+        if (Method.POST != session.getMethod() || !"/invokeMethod".equals(session.getUri())) {
+            return corsEnabledResponse(
+                newFixedLengthResponse(Response.Status.NOT_FOUND,
+                    MIME_PLAINTEXT, "Only POST /invokeMethod is supported")
+            );
+        }
 
-    private void handleClient(Socket client) {
         try {
-            BufferedReader reader = new BufferedReader(new InputStreamReader(client.getInputStream(), StandardCharsets.UTF_8));
-            OutputStream output = client.getOutputStream();
-            try {
-                String requestLine = reader.readLine();
-                if (requestLine == null) return;
-                String[] parts = requestLine.split(" ");
-                String method = parts[0];
-                String path = parts[1];
+            // 安全读取 JSON body
+            String bodyStr = readRequestBody(session.getInputStream(),
+                session.getHeaders().get("content-length"));
+            Log.d(TAG, "Received body: " + bodyStr);
 
-                int contentLength = 0;
-                while (true) {
-                    String line = reader.readLine();
-                    if (line == null || line.isEmpty()) break;
-                    if (line.toLowerCase().startsWith("content-length:")) {
-                        contentLength = Integer.parseInt(line.substring(15).trim());
-                    }
-                }
-
-                String body = "";
-                if ("POST".equalsIgnoreCase(method) && contentLength > 0) {
-                    char[] buf = new char[contentLength];
-                    int totalRead = 0;
-                    while (totalRead < contentLength) {
-                        int read = reader.read(buf, totalRead, contentLength - totalRead);
-                        if (read == -1) break;
-                        totalRead += read;
-                    }
-                    body = new String(buf, 0, totalRead);
-                }
-
-                String response;
-                if ("POST".equalsIgnoreCase(method) && "/invokeMethod".equals(path)) {
-                    try {
-                        JsonNode root = mapper.readTree(body);
-                        String methodName = root.get("methodName").asText();
-                        String params = root.has("params") ? root.get("params").toString() : null;
-                        String result = javaBridge.invokeMethod(methodName, params);
-                        response = result;
-                    } catch (Exception e) {
-                        ObjectNode err = mapper.createObjectNode();
-                        err.put("error", e.getMessage() == null ? e.toString() : e.getMessage());
-                        response = err.toString();
-                        log.warning("handleClient invokeMethod error: " + e.getMessage());
-                    }
-                } else {
-                    ObjectNode err = mapper.createObjectNode();
-                    err.put("error", "Only POST /invokeMethod allowed");
-                    response = err.toString();
-                }
-
-                byte[] respBytes = response.getBytes(StandardCharsets.UTF_8);
-                String header = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " + respBytes.length + "\r\nConnection: close\r\n\r\n";
-                output.write(header.getBytes(StandardCharsets.UTF_8));
-                output.write(respBytes);
-                output.flush();
-            } finally {
-                try { client.close(); } catch (Exception ignored) {}
+            if (bodyStr.isEmpty()) {
+                return corsEnabledResponse(
+                    jsonResponse(Response.Status.BAD_REQUEST, "Empty request body")
+                );
             }
+
+            JsonNode root = mapper.readTree(bodyStr);
+            if (!root.has("methodName")) {
+                return corsEnabledResponse(
+                    jsonResponse(Response.Status.BAD_REQUEST, "Missing 'methodName'")
+                );
+            }
+
+            String methodName = root.get("methodName").asText();
+            String params = root.has("params") ? root.get("params").toString() : null;
+
+            String result = javaBridge.invokeMethod(methodName, params);
+            return corsEnabledResponse(
+                newFixedLengthResponse(Response.Status.OK,
+                    "application/json; charset=utf-8", result)
+            );
+
         } catch (Exception e) {
-            log.warning("Fatal error handling client: " + e.getMessage());
-            try { client.close(); } catch (Exception ignored) {}
+            Log.e(TAG, "Error handling request", e);
+            return corsEnabledResponse(
+                jsonResponse(Response.Status.INTERNAL_ERROR,
+                    e.getMessage() != null ? e.getMessage() : e.toString())
+            );
         }
     }
 
-
-    public void stop() {
-        running = false;
+    /**
+     * 读取指定长度的请求体，避免 NanoHTTPD 默认解析带来的问题
+     */
+    private String readRequestBody(InputStream inputStream, String contentLengthStr) throws IOException {
+        int contentLength = 0;
         try {
-            if (serverSocket != null) serverSocket.close();
-        } catch (IOException e) {
-            // ignore
+            contentLength = Integer.parseInt(contentLengthStr != null ? contentLengthStr : "0");
+        } catch (NumberFormatException ignored) {}
+
+        if (contentLength <= 0) {
+            // 无 Content-Length 时尝试读取全部可用数据
+            ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+            byte[] data = new byte[4096];
+            int n;
+            while ((n = inputStream.read(data)) != -1) {
+                buffer.write(data, 0, n);
+                if (inputStream.available() <= 0) break;
+            }
+            return buffer.toString("UTF-8");
         }
+
+        byte[] bodyBytes = new byte[contentLength];
+        int offset = 0;
+        while (offset < contentLength) {
+            int read = inputStream.read(bodyBytes, offset, contentLength - offset);
+            if (read == -1) break;
+            offset += read;
+        }
+        return new String(bodyBytes, 0, offset, StandardCharsets.UTF_8);
+    }
+
+    /**
+     * 为所有响应添加 CORS 头，支持跨域访问
+     */
+    private Response corsEnabledResponse(Response response) {
+        response.addHeader("Access-Control-Allow-Origin", "*");
+        response.addHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+        response.addHeader("Access-Control-Allow-Headers", "Content-Type");
+        return response;
+    }
+
+    private Response jsonResponse(Response.Status status, String errorMsg) {
+        ObjectNode err = mapper.createObjectNode();
+        err.put("error", errorMsg);
+        return newFixedLengthResponse(status,
+            "application/json; charset=utf-8", err.toString());
+    }
+
+    public void shutdown() {
+        stop();
+        Log.i(TAG, "Server stopped");
     }
 }
-

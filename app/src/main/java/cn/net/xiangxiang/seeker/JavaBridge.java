@@ -16,6 +16,7 @@ import android.webkit.WebViewClient;
 
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 
@@ -73,7 +74,11 @@ public class JavaBridge {
         this.homeWebView = homeWebView;
 
         // 给 invokeMethod 添加一个http-api接口服务
-        new InvokeHttpApi(this);
+        try {
+            new InvokeHttpApi(this, 9876);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
 
     }
 
