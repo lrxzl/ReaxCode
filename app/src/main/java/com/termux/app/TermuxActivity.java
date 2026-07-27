@@ -190,6 +190,13 @@ private WebView mHomeWebView;
     private boolean mIsVisible;
 
     /**
+     * 全局静态变量，标记 Activity 是否处于激活状态（前台且用户可交互）
+     * 切到其他应用或回到桌面时变为 false
+     */
+    public static boolean isActive = false;
+
+
+    /**
      * If onResume() was called after onCreate().
      */
     private boolean mIsOnResumeAfterOnCreate = false;
@@ -414,7 +421,16 @@ private WebView mHomeWebView;
             mHomeWebViewFragment.stopKeepAlive();
         }
         mHomeWebViewTermuxManager.stopAudioRestartTimer();
+        isActive = true;
         mIsOnResumeAfterOnCreate = false;
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        isActive = false;
+        Logger.logVerbose(LOG_TAG, "onPause");
+        isActive = false;
     }
 
     @Override

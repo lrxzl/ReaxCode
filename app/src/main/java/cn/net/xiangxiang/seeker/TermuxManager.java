@@ -15,6 +15,7 @@ import android.provider.Settings;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.TermuxActivity;
 import com.termux.app.TermuxService;
 import com.termux.shared.shell.command.ExecutionCommand;
 import com.termux.shared.shell.command.runner.app.AppShell;
@@ -385,6 +386,11 @@ public class TermuxManager {
         CommandResult result = new CommandResult();
         result.command = command;
 
+        if (TermuxActivity.isActive) {
+            // 在前台直接执行
+            return executeDirectly(command, result);
+        }
+
         // 如果Service还未绑定，等待绑定完成（最多5秒）
         if (mTermuxService == null && mIsBound == false) {
             Logger.logDebug(LOG_TAG, "TermuxService未绑定，等待绑定...");
@@ -403,6 +409,7 @@ public class TermuxManager {
 
         // 优先通过TermuxService执行（保持前台服务）
         if (mTermuxService != null) {
+            // 先暂时注释
             return executeViaTermuxService(command, result);
         }
 
@@ -440,7 +447,7 @@ public class TermuxManager {
                             return result;
                         }
                         try {
-                            Thread.sleep(100);
+                            Thread.sleep(50);
                         } catch (InterruptedException e) {
                             Thread.currentThread().interrupt();
                             result.error = "等待命令完成时被中断: " + command;
