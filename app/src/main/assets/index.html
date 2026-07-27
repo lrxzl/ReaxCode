@@ -8,8 +8,8 @@
         :root {
             --bg: #f0f2f5;
             --card-bg: #ffffff;
-            --card-shadow: 0 2px 12px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.04);
-            --card-shadow-hover: 0 6px 20px rgba(0, 0, 0, 0.10), 0 2px 6px rgba(0, 0, 0, 0.05);
+            --card-shadow: 0 2px 10px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0, 0, 0, 0.04);
+            --card-shadow-hover: 0 6px 18px rgba(0, 0, 0, 0.08), 0 2px 5px rgba(0, 0, 0, 0.04);
             --text-primary: #1a1a2e;
             --text-secondary: #6b7280;
             --text-tertiary: #9ca3af;
@@ -26,7 +26,7 @@
             --radius-xl: 24px;
             --font-mono: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
             --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-            --transition-spring: 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+            --transition-spring: 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
         }
 
         * {
@@ -38,7 +38,6 @@
         html {
             -webkit-tap-highlight-color: transparent;
             -webkit-font-smoothing: antialiased;
-            -moz-osx-font-smoothing: grayscale;
             height: 100%;
         }
 
@@ -46,10 +45,7 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
                 'Microsoft YaHei', 'Helvetica Neue', sans-serif;
             background: var(--bg);
-            background-image:
-                radial-gradient(ellipse at 20% 10%, rgba(79, 110, 247, 0.04) 0%, transparent 60%),
-                radial-gradient(ellipse at 80% 30%, rgba(108, 140, 255, 0.03) 0%, transparent 50%),
-                radial-gradient(ellipse at 50% 70%, rgba(79, 110, 247, 0.03) 0%, transparent 55%);
+            background-image: radial-gradient(ellipse at 50% 20%, rgba(79, 110, 247, 0.04) 0%, transparent 60%);
             min-height: 100vh;
             min-height: 100dvh;
             display: flex;
@@ -67,51 +63,45 @@
             max-width: 440px;
             display: flex;
             flex-direction: column;
-            gap: 22px;
+            gap: 20px;
         }
 
-        /* ========== 顶部区域 ========== */
+        /* ========== 顶部 ========== */
         .header {
             text-align: center;
             padding: 10px 0 4px;
-            animation: fadeInDown 0.6s ease-out;
+            animation: fadeInDown 0.5s ease-out;
         }
-
         @keyframes fadeInDown {
             from {
                 opacity: 0;
-                transform: translateY(-16px);
+                transform: translateY(-14px);
             }
             to {
                 opacity: 1;
                 transform: translateY(0);
             }
         }
-
         .time-display {
-            font-size: 42px;
+            font-size: 40px;
             font-weight: 700;
             letter-spacing: -1px;
-            font-variant-numeric: tabular-nums;
             font-family: var(--font-mono);
             color: var(--text-primary);
             line-height: 1.1;
-            transition: color 0.5s;
         }
-
         .date-display {
-            font-size: 14px;
+            font-size: 13px;
             color: var(--text-secondary);
-            margin-top: 4px;
+            margin-top: 3px;
             font-weight: 500;
             letter-spacing: 0.3px;
         }
-
         .greeting {
-            font-size: 17px;
+            font-size: 16px;
             font-weight: 600;
             color: var(--text-primary);
-            margin-top: 6px;
+            margin-top: 5px;
             letter-spacing: 0.2px;
         }
         .greeting .wave {
@@ -144,14 +134,223 @@
             }
         }
 
-        /* ========== 导航卡片网格 ========== */
+        /* ========== 输入区域 ========== */
+        .input-section {
+            position: relative;
+            animation: fadeInUp 0.5s ease-out 0.2s backwards;
+        }
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(16px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .input-wrapper {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .input-container {
+            flex: 1;
+            position: relative;
+        }
+        .url-input {
+            width: 100%;
+            height: 48px;
+            border: 2px solid transparent;
+            border-radius: var(--radius-xl);
+            padding: 0 42px 0 16px;
+            font-size: 15px;
+            font-family: inherit;
+            background: var(--card-bg);
+            color: var(--text-primary);
+            box-shadow: var(--card-shadow);
+            outline: none;
+            transition: all var(--transition);
+            letter-spacing: 0.2px;
+            -webkit-appearance: none;
+            appearance: none;
+        }
+        .url-input::placeholder {
+            color: #c0c6d0;
+            font-size: 14px;
+        }
+        .url-input:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 4px rgba(79, 110, 247, 0.07), var(--card-shadow);
+        }
+        .input-clear {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            border: none;
+            background: #e5e7eb;
+            color: #6b7280;
+            font-size: 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: all var(--transition);
+            z-index: 3;
+        }
+        .input-clear.visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .input-clear:active {
+            background: #d1d5db;
+            transform: translateY(-50%) scale(0.88);
+        }
+        .go-btn {
+            height: 48px;
+            width: 48px;
+            min-width: 48px;
+            border-radius: 50%;
+            border: none;
+            background: var(--accent-gradient);
+            color: #fff;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            letter-spacing: 0.5px;
+            box-shadow: 0 4px 14px rgba(79, 110, 247, 0.28);
+            transition: all var(--transition-spring);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .go-btn:active {
+            transform: scale(0.9);
+            box-shadow: 0 2px 6px rgba(79, 110, 247, 0.22);
+        }
+        .go-btn svg {
+            width: 19px;
+            height: 19px;
+            stroke: #fff;
+            fill: none;
+            stroke-width: 2.5;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        /* ========== 历史记录下拉 ========== */
+        .history-dropdown {
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: calc(100% + 8px);
+            background: var(--card-bg);
+            border-radius: var(--radius-lg);
+            box-shadow: 0 8px 28px rgba(0, 0, 0, 0.11), 0 2px 6px rgba(0, 0, 0, 0.05);
+            overflow: hidden;
+            z-index: 20;
+            opacity: 0;
+            transform: translateY(8px);
+            pointer-events: none;
+            transition: all var(--transition);
+            max-height: 260px;
+            overflow-y: auto;
+            border: 1px solid var(--border-light);
+        }
+        .history-dropdown.active {
+            opacity: 1;
+            transform: translateY(0);
+            pointer-events: auto;
+        }
+        .history-header {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 11px 15px 7px;
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-tertiary);
+            letter-spacing: 0.8px;
+            text-transform: uppercase;
+            border-bottom: 1px solid var(--border-light);
+        }
+        .history-item {
+            display: flex;
+            align-items: center;
+            gap: 11px;
+            padding: 12px 15px;
+            cursor: pointer;
+            transition: background 0.15s;
+            border-bottom: 1px solid var(--border-light);
+            -webkit-tap-highlight-color: transparent;
+        }
+        .history-item:last-child {
+            border-bottom: none;
+        }
+        .history-item:active {
+            background: #f5f6fa;
+        }
+        .history-item-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            background: var(--accent-light);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 15px;
+            flex-shrink: 0;
+        }
+        .history-item-info {
+            flex: 1;
+            min-width: 0;
+        }
+        .history-item-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-primary);
+            line-height: 1.3;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .history-item-url {
+            font-size: 10px;
+            color: var(--text-tertiary);
+            font-family: var(--font-mono);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            letter-spacing: -0.2px;
+        }
+        .history-item-action {
+            font-size: 11px;
+            color: var(--accent);
+            font-weight: 600;
+            white-space: nowrap;
+            letter-spacing: 0.2px;
+        }
+        .history-search-action {
+            background: #fafbfd;
+        }
+        .history-search-action .history-item-icon {
+            background: #f0f4ff;
+        }
+
+        /* ========== 导航卡片 ========== */
         .nav-section {
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 8px;
         }
         .nav-section-label {
-            font-size: 12px;
+            font-size: 11px;
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 1.2px;
@@ -159,104 +358,86 @@
             padding-left: 6px;
             margin-bottom: -2px;
         }
-
         .nav-grid {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
-            gap: 12px;
+            gap: 10px;
         }
-
         .nav-card {
             background: var(--card-bg);
-            border-radius: var(--radius-lg);
-            padding: 18px 16px;
+            border-radius: var(--radius);
+            padding: 16px 14px;
             text-decoration: none;
             color: var(--text-primary);
             box-shadow: var(--card-shadow);
             display: flex;
             align-items: center;
-            gap: 13px;
+            gap: 11px;
             transition: all var(--transition-spring);
             position: relative;
             overflow: hidden;
             cursor: pointer;
-            -webkit-tap-highlight-color: transparent;
             border: 1.5px solid transparent;
-            animation: fadeInUp 0.5s ease-out backwards;
-            min-height: 66px;
+            animation: fadeInUp 0.45s ease-out backwards;
+            min-height: 60px;
         }
         .nav-card:nth-child(1) {
-            animation-delay: 0.05s;
+            animation-delay: 0.04s;
         }
         .nav-card:nth-child(2) {
-            animation-delay: 0.12s;
+            animation-delay: 0.10s;
         }
         .nav-card:nth-child(3) {
-            animation-delay: 0.19s;
+            animation-delay: 0.16s;
         }
         .nav-card:nth-child(4) {
-            animation-delay: 0.26s;
+            animation-delay: 0.22s;
         }
         .nav-card:nth-child(5) {
-            animation-delay: 0.33s;
+            animation-delay: 0.28s;
         }
         .nav-card:nth-child(6) {
-            animation-delay: 0.40s;
+            animation-delay: 0.34s;
         }
         .nav-card:nth-child(7) {
-            animation-delay: 0.47s;
+            animation-delay: 0.40s;
         }
         .nav-card:nth-child(8) {
-            animation-delay: 0.54s;
+            animation-delay: 0.46s;
         }
-
-        @keyframes fadeInUp {
-            from {
-                opacity: 0;
-                transform: translateY(20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
         .nav-card:active {
             transform: scale(0.96);
-            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
             transition: all 0.1s ease-out;
         }
         .nav-card:hover {
             box-shadow: var(--card-shadow-hover);
             border-color: #e0e4f0;
         }
-
         .nav-card-icon {
-            width: 44px;
-            height: 44px;
+            width: 40px;
+            height: 40px;
             border-radius: var(--radius-sm);
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 22px;
+            font-size: 20px;
             flex-shrink: 0;
             background: var(--accent-light);
             transition: all var(--transition);
-            position: relative;
         }
         .nav-card:hover .nav-card-icon {
-            transform: scale(1.06);
+            transform: scale(1.05);
         }
-
         .nav-card-info {
             flex: 1;
             min-width: 0;
             display: flex;
             flex-direction: column;
-            gap: 2px;
+            gap: 1px;
         }
         .nav-card-name {
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 600;
             letter-spacing: 0.1px;
             white-space: nowrap;
@@ -265,28 +446,25 @@
             line-height: 1.3;
         }
         .nav-card-url {
-            font-size: 11px;
+            font-size: 10px;
             color: var(--text-tertiary);
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
             font-family: var(--font-mono);
             letter-spacing: -0.2px;
-            line-height: 1.2;
         }
-
-        /* 删除按钮 */
         .nav-card-delete {
             position: absolute;
-            top: 8px;
-            right: 8px;
-            width: 24px;
-            height: 24px;
+            top: 7px;
+            right: 7px;
+            width: 22px;
+            height: 22px;
             border-radius: 50%;
             background: var(--danger-light);
             color: var(--danger);
             border: none;
-            font-size: 12px;
+            font-size: 10px;
             cursor: pointer;
             display: flex;
             align-items: center;
@@ -295,7 +473,6 @@
             transform: scale(0.7);
             transition: all var(--transition);
             z-index: 2;
-            -webkit-tap-highlight-color: transparent;
             pointer-events: none;
         }
         .nav-card.show-delete .nav-card-delete {
@@ -307,8 +484,6 @@
             background: #fecaca;
             transform: scale(0.85) !important;
         }
-
-        /* 编辑模式提示 */
         .edit-mode-hint {
             font-size: 11px;
             color: var(--text-tertiary);
@@ -317,7 +492,7 @@
             letter-spacing: 0.3px;
             transition: all var(--transition);
             opacity: 0;
-            transform: translateY(-6px);
+            transform: translateY(-4px);
             pointer-events: none;
             height: 0;
             overflow: hidden;
@@ -337,10 +512,10 @@
             box-shadow: none;
             cursor: pointer;
             justify-content: center;
-            gap: 8px;
+            gap: 7px;
             color: var(--text-tertiary);
             transition: all var(--transition);
-            min-height: 66px;
+            min-height: 60px;
         }
         .nav-card-add:hover {
             border-color: var(--accent);
@@ -350,12 +525,12 @@
         }
         .nav-card-add:active {
             transform: scale(0.96);
-            background: rgba(79, 110, 247, 0.06);
+            background: rgba(79, 110, 247, 0.05);
             border-color: var(--accent);
             color: var(--accent);
         }
         .nav-card-add .add-icon {
-            font-size: 20px;
+            font-size: 18px;
             font-weight: 300;
             line-height: 1;
             transition: transform var(--transition-spring);
@@ -369,211 +544,11 @@
             letter-spacing: 0.2px;
         }
 
-        /* ========== 输入区域 ========== */
-        .input-section {
-            position: relative;
-            animation: fadeInUp 0.5s ease-out 0.35s backwards;
-        }
-
-        .input-wrapper {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-        }
-
-        .input-container {
-            flex: 1;
-            position: relative;
-        }
-
-        .url-input {
-            width: 100%;
-            height: 50px;
-            border: 2px solid transparent;
-            border-radius: var(--radius-xl);
-            padding: 0 44px 0 18px;
-            font-size: 15px;
-            font-family: inherit;
-            background: var(--card-bg);
-            color: var(--text-primary);
-            box-shadow: var(--card-shadow);
-            outline: none;
-            transition: all var(--transition);
-            letter-spacing: 0.2px;
-            -webkit-appearance: none;
-            appearance: none;
-        }
-        .url-input::placeholder {
-            color: #c0c6d0;
-            letter-spacing: 0.3px;
-            font-size: 14px;
-        }
-        .url-input:focus {
-            border-color: var(--accent);
-            box-shadow: 0 0 0 4px rgba(79, 110, 247, 0.08), var(--card-shadow);
-        }
-
-        .input-clear {
-            position: absolute;
-            right: 12px;
-            top: 50%;
-            transform: translateY(-50%);
-            width: 28px;
-            height: 28px;
-            border-radius: 50%;
-            border: none;
-            background: #e5e7eb;
-            color: #6b7280;
-            font-size: 14px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            opacity: 0;
-            pointer-events: none;
-            transition: all var(--transition);
-            -webkit-tap-highlight-color: transparent;
-            z-index: 3;
-        }
-        .input-clear.visible {
-            opacity: 1;
-            pointer-events: auto;
-        }
-        .input-clear:active {
-            background: #d1d5db;
-            transform: translateY(-50%) scale(0.88);
-        }
-
-        .go-btn {
-            height: 50px;
-            width: 50px;
-            min-width: 50px;
-            border-radius: 50%;
-            border: none;
-            background: var(--accent-gradient);
-            color: #fff;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            letter-spacing: 0.5px;
-            box-shadow: 0 4px 14px rgba(79, 110, 247, 0.3);
-            transition: all var(--transition-spring);
-            -webkit-tap-highlight-color: transparent;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .go-btn:active {
-            transform: scale(0.9);
-            box-shadow: 0 2px 6px rgba(79, 110, 247, 0.25);
-        }
-        .go-btn:hover {
-            box-shadow: 0 6px 20px rgba(79, 110, 247, 0.4);
-            transform: scale(1.04);
-        }
-        .go-btn svg {
-            width: 20px;
-            height: 20px;
-            stroke: #fff;
-            fill: none;
-            stroke-width: 2.5;
-            stroke-linecap: round;
-            stroke-linejoin: round;
-        }
-
-        /* ========== 推荐下拉列表 ========== */
-        .suggestions {
-            position: absolute;
-            left: 0;
-            right: 0;
-            bottom: calc(100% + 8px);
-            background: var(--card-bg);
-            border-radius: var(--radius-lg);
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
-            overflow: hidden;
-            z-index: 20;
-            opacity: 0;
-            transform: translateY(8px);
-            pointer-events: none;
-            transition: all var(--transition);
-            max-height: 240px;
-            overflow-y: auto;
-            border: 1px solid var(--border-light);
-        }
-        .suggestions.active {
-            opacity: 1;
-            transform: translateY(0);
-            pointer-events: auto;
-        }
-
-        .suggestion-item {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 13px 16px;
-            cursor: pointer;
-            transition: background 0.15s;
-            border-bottom: 1px solid var(--border-light);
-            -webkit-tap-highlight-color: transparent;
-        }
-        .suggestion-item:last-child {
-            border-bottom: none;
-        }
-        .suggestion-item:active {
-            background: #f5f6fa;
-        }
-        .suggestion-item:hover {
-            background: #f9fafb;
-        }
-        .suggestion-icon {
-            width: 34px;
-            height: 34px;
-            border-radius: 8px;
-            background: var(--accent-light);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 16px;
-            flex-shrink: 0;
-        }
-        .suggestion-info {
-            flex: 1;
-            min-width: 0;
-        }
-        .suggestion-name {
-            font-size: 13px;
-            font-weight: 600;
-            color: var(--text-primary);
-            line-height: 1.3;
-        }
-        .suggestion-url {
-            font-size: 11px;
-            color: var(--text-tertiary);
-            font-family: var(--font-mono);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            letter-spacing: -0.2px;
-        }
-        .suggestion-action {
-            font-size: 11px;
-            color: var(--accent);
-            font-weight: 600;
-            white-space: nowrap;
-            letter-spacing: 0.2px;
-        }
-        .suggestion-item.search-action {
-            background: #fafbfd;
-        }
-        .suggestion-item.search-action .suggestion-icon {
-            background: #f0f4ff;
-        }
-
-        /* ========== 模态弹窗 ========== */
+        /* ========== 弹窗 ========== */
         .modal-overlay {
             position: fixed;
             inset: 0;
-            background: rgba(0, 0, 0, 0.45);
+            background: rgba(0, 0, 0, 0.4);
             z-index: 100;
             display: flex;
             align-items: center;
@@ -589,26 +564,24 @@
             opacity: 1;
             pointer-events: auto;
         }
-
         .modal {
             background: var(--card-bg);
             border-radius: var(--radius-xl);
-            padding: 24px 20px 20px;
+            padding: 22px 18px 18px;
             width: 100%;
-            max-width: 380px;
-            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2);
-            transform: translateY(20px) scale(0.94);
+            max-width: 370px;
+            box-shadow: 0 18px 45px rgba(0, 0, 0, 0.18);
+            transform: translateY(18px) scale(0.94);
             transition: all var(--transition-spring);
             display: flex;
             flex-direction: column;
-            gap: 16px;
+            gap: 14px;
         }
         .modal-overlay.active .modal {
             transform: translateY(0) scale(1);
         }
-
         .modal-title {
-            font-size: 18px;
+            font-size: 17px;
             font-weight: 700;
             text-align: center;
             letter-spacing: 0.2px;
@@ -616,21 +589,21 @@
         .modal-field {
             display: flex;
             flex-direction: column;
-            gap: 5px;
+            gap: 4px;
         }
         .modal-label {
-            font-size: 12px;
+            font-size: 11px;
             font-weight: 600;
             color: var(--text-secondary);
             letter-spacing: 0.5px;
             text-transform: uppercase;
         }
         .modal-input {
-            height: 44px;
+            height: 42px;
             border: 2px solid var(--border);
             border-radius: var(--radius-sm);
-            padding: 0 14px;
-            font-size: 15px;
+            padding: 0 12px;
+            font-size: 14px;
             font-family: inherit;
             outline: none;
             transition: all var(--transition);
@@ -640,27 +613,25 @@
         .modal-input:focus {
             border-color: var(--accent);
             background: #fff;
-            box-shadow: 0 0 0 3px rgba(79, 110, 247, 0.06);
+            box-shadow: 0 0 0 3px rgba(79, 110, 247, 0.05);
         }
-
         .emoji-picker {
             display: flex;
             flex-wrap: wrap;
-            gap: 8px;
+            gap: 7px;
         }
         .emoji-option {
-            width: 40px;
-            height: 40px;
+            width: 37px;
+            height: 37px;
             border-radius: var(--radius-sm);
             border: 2px solid transparent;
             background: #f9fafb;
-            font-size: 20px;
+            font-size: 18px;
             cursor: pointer;
             transition: all var(--transition);
             display: flex;
             align-items: center;
             justify-content: center;
-            -webkit-tap-highlight-color: transparent;
         }
         .emoji-option:active {
             transform: scale(0.9);
@@ -668,25 +639,23 @@
         .emoji-option.selected {
             border-color: var(--accent);
             background: var(--accent-light);
-            box-shadow: 0 0 0 3px rgba(79, 110, 247, 0.08);
+            box-shadow: 0 0 0 3px rgba(79, 110, 247, 0.07);
         }
-
         .modal-actions {
             display: flex;
             gap: 10px;
-            margin-top: 4px;
+            margin-top: 2px;
         }
         .btn {
             flex: 1;
-            height: 44px;
+            height: 42px;
             border-radius: var(--radius-sm);
             border: none;
-            font-size: 15px;
+            font-size: 14px;
             font-weight: 600;
             cursor: pointer;
             letter-spacing: 0.3px;
             transition: all var(--transition);
-            -webkit-tap-highlight-color: transparent;
             font-family: inherit;
         }
         .btn:active {
@@ -702,36 +671,36 @@
         .btn-save {
             background: var(--accent-gradient);
             color: #fff;
-            box-shadow: 0 4px 12px rgba(79, 110, 247, 0.25);
+            box-shadow: 0 4px 12px rgba(79, 110, 247, 0.22);
         }
         .btn-save:active {
-            box-shadow: 0 2px 4px rgba(79, 110, 247, 0.2);
+            box-shadow: 0 2px 4px rgba(79, 110, 247, 0.18);
         }
 
         /* ========== Toast ========== */
         .toast {
             position: fixed;
-            top: 30px;
+            top: 28px;
             left: 50%;
             transform: translateX(-50%) translateY(-120px);
             background: #1a1a2e;
             color: #fff;
-            padding: 12px 22px;
-            border-radius: 24px;
+            padding: 10px 20px;
+            border-radius: 22px;
             font-size: 13px;
             font-weight: 600;
             letter-spacing: 0.3px;
             z-index: 200;
             pointer-events: none;
             transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 8px 22px rgba(0, 0, 0, 0.18);
             white-space: nowrap;
         }
         .toast.show {
             transform: translateX(-50%) translateY(0);
         }
 
-        /* ========== 滚动条美化 ========== */
+        /* ========== 滚动条 ========== */
         ::-webkit-scrollbar {
             width: 3px;
         }
@@ -743,15 +712,50 @@
             border-radius: 10px;
         }
 
-        /* ========== 响应式微调 ========== */
+        /* ========== 响应式 ========== */
         @media (max-width: 360px) {
             .nav-grid {
+                gap: 7px;
+            }
+            .nav-card {
+                padding: 13px 10px;
                 gap: 8px;
+                border-radius: var(--radius-sm);
+                min-height: 52px;
+            }
+            .nav-card-icon {
+                width: 34px;
+                height: 34px;
+                font-size: 17px;
+                border-radius: 7px;
+            }
+            .nav-card-name {
+                font-size: 12px;
+            }
+            .time-display {
+                font-size: 32px;
+            }
+            .url-input {
+                height: 44px;
+                font-size: 14px;
+                padding: 0 38px 0 12px;
+            }
+            .go-btn {
+                height: 44px;
+                width: 44px;
+                min-width: 44px;
+            }
+        }
+        @media (min-width: 420px) {
+            .nav-grid {
+                grid-template-columns: repeat(3, 1fr);
+                gap: 10px;
             }
             .nav-card {
                 padding: 14px 12px;
-                gap: 10px;
+                gap: 9px;
                 border-radius: var(--radius);
+                min-height: 54px;
             }
             .nav-card-icon {
                 width: 36px;
@@ -760,44 +764,10 @@
                 border-radius: 8px;
             }
             .nav-card-name {
-                font-size: 13px;
-            }
-            .time-display {
-                font-size: 34px;
-            }
-            .url-input {
-                height: 46px;
-                font-size: 14px;
-                padding: 0 40px 0 14px;
-            }
-            .go-btn {
-                height: 46px;
-                width: 46px;
-                min-width: 46px;
-            }
-        }
-        @media (min-width: 420px) {
-            .nav-grid {
-                grid-template-columns: repeat(3, 1fr);
-                gap: 12px;
-            }
-            .nav-card {
-                padding: 16px 14px;
-                gap: 10px;
-                border-radius: var(--radius);
-                min-height: 58px;
-            }
-            .nav-card-icon {
-                width: 38px;
-                height: 38px;
-                font-size: 19px;
-                border-radius: 9px;
-            }
-            .nav-card-name {
-                font-size: 13px;
+                font-size: 12px;
             }
             .nav-card-url {
-                font-size: 10px;
+                font-size: 9px;
             }
         }
     </style>
@@ -811,22 +781,12 @@
         <div class="greeting" id="greeting"></div>
     </header>
 
-    <!-- 输入地址区域 -->
+    <!-- 输入区域 -->
     <section class="input-section" id="inputSection">
-        <div class="suggestions" id="suggestions"></div>
         <div class="input-wrapper">
             <div class="input-container">
-                <input
-                    type="text"
-                    class="url-input"
-                    id="urlInput"
-                    placeholder="输入网址或关键词…"
-                    autocomplete="off"
-                    autocorrect="off"
-                    autocapitalize="off"
-                    spellcheck="false"
-                    enterkeyhint="go"
-                >
+                <input type="text" class="url-input" id="urlInput" placeholder="输入网址或搜索…" autocomplete="off"
+                       autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="go">
                 <button class="input-clear" id="inputClear" aria-label="清除">✕</button>
             </div>
             <button class="go-btn" id="goBtn" aria-label="前往">
@@ -836,19 +796,17 @@
                 </svg>
             </button>
         </div>
+        <div class="history-dropdown" id="historyDropdown"></div>
     </section>
 
-    <!-- 导航卡片区 -->
+    <!-- 导航卡片 -->
     <section class="nav-section">
         <div class="nav-section-label">快捷入口</div>
-        <div class="nav-grid" id="navGrid">
-            <!-- 动态渲染 -->
-        </div>
+        <div class="nav-grid" id="navGrid"></div>
         <div class="edit-mode-hint" id="editHint">
-            💡 长按任意卡片可进入编辑模式，点击右上角 <span style="color:#ef4444;">✕</span> 删除自定义入口
+            💡 长按卡片进入编辑模式，点击 <span style="color:#ef4444;">✕</span> 删除自定义入口
         </div>
     </section>
-
 </div>
 
 <!-- 添加入口弹窗 -->
@@ -865,9 +823,7 @@
         </div>
         <div class="modal-field">
             <label class="modal-label">图标</label>
-            <div class="emoji-picker" id="emojiPicker">
-                <!-- 动态生成 -->
-            </div>
+            <div class="emoji-picker" id="emojiPicker"></div>
         </div>
         <div class="modal-actions">
             <button class="btn btn-cancel" id="modalCancel">取消</button>
@@ -882,53 +838,16 @@
 <script>
     (function() {
         // ==================== 常量 ====================
-        const STORAGE_KEY = 'navpage_custom_entries';
+        const STORAGE_ENTRIES = 'navpage_custom_entries';
+        const STORAGE_HISTORY = 'navpage_history';
+        const MAX_HISTORY = 30;
+
         const DEFAULT_ENTRIES = [
             { name: '项目管理', url: 'http://localhost:3456', icon: '📁', isDefault: true },
             { name: 'Gitee', url: 'https://gitee.com', icon: '🔷', isDefault: true },
             { name: 'GitHub', url: 'https://github.com', icon: '🐙', isDefault: true },
         ];
 
-        // 推荐链接库
-        const SUGGESTION_LIBRARY = [
-            { name: 'GitHub', url: 'https://github.com', icon: '🐙', keywords: 'github git 代码仓库' },
-            { name: 'Gitee', url: 'https://gitee.com', icon: '🔷', keywords: 'gitee 码云 git' },
-            { name: 'GitLab', url: 'https://gitlab.com', icon: '🦊', keywords: 'gitlab git' },
-            { name: 'Stack Overflow', url: 'https://stackoverflow.com', icon: '📚',
-            keywords: 'stackoverflow stack overflow 问答' },
-            { name: 'MDN Web Docs', url: 'https://developer.mozilla.org', icon: '📖',
-                keywords: 'mdn developer mozilla 文档 css html js' },
-            { name: 'npm', url: 'https://www.npmjs.com', icon: '📦', keywords: 'npm node package 包管理' },
-            { name: 'PyPI', url: 'https://pypi.org', icon: '🐍', keywords: 'pypi python pip 包' },
-            { name: '掘金', url: 'https://juejin.cn', icon: '💎', keywords: '掘金 juejin 前端 文章' },
-            { name: '知乎', url: 'https://www.zhihu.com', icon: '💡', keywords: '知乎 zhihu 问答' },
-            { name: 'CSDN', url: 'https://www.csdn.net', icon: '📝', keywords: 'csdn 博客 技术' },
-            { name: '博客园', url: 'https://www.cnblogs.com', icon: '🌱', keywords: '博客园 cnblogs 博客' },
-            { name: 'SegmentFault', url: 'https://segmentfault.com', icon: '🔧',
-            keywords: 'segmentfault 思否 问答' },
-            { name: 'Google', url: 'https://www.google.com', icon: '🔍', keywords: 'google 谷歌 搜索' },
-            { name: '百度', url: 'https://www.baidu.com', icon: '🅱️', keywords: 'baidu 百度 搜索' },
-            { name: 'Bing', url: 'https://www.bing.com', icon: '🔎', keywords: 'bing 必应 搜索' },
-            { name: 'Bilibili', url: 'https://www.bilibili.com', icon: '📺', keywords: 'bilibili b站 视频' },
-            { name: 'YouTube', url: 'https://www.youtube.com', icon: '🎬', keywords: 'youtube 油管 视频' },
-            { name: 'Notion', url: 'https://www.notion.so', icon: '📋', keywords: 'notion 笔记 文档' },
-            { name: 'Figma', url: 'https://www.figma.com', icon: '🎨', keywords: 'figma 设计 原型' },
-            { name: 'Canva', url: 'https://www.canva.com', icon: '🖼️', keywords: 'canva 设计 图片' },
-            { name: 'DeepL', url: 'https://www.deepl.com', icon: '🌐', keywords: 'deepl 翻译' },
-            { name: '谷歌翻译', url: 'https://translate.google.com', icon: '🗣️', keywords: 'translate 翻译 google' },
-            { name: 'Docker Hub', url: 'https://hub.docker.com', icon: '🐳', keywords: 'docker hub 容器' },
-            { name: 'CodePen', url: 'https://codepen.io', icon: '✏️', keywords: 'codepen 代码 在线编辑' },
-            { name: 'JSFiddle', url: 'https://jsfiddle.net', icon: '🎻', keywords: 'jsfiddle 在线编辑 js' },
-            { name: 'Vercel', url: 'https://vercel.com', icon: '▲', keywords: 'vercel 部署 托管' },
-            { name: 'Netlify', url: 'https://www.netlify.com', icon: '⚡', keywords: 'netlify 部署 托管' },
-            { name: 'Tailwind CSS', url: 'https://tailwindcss.com', icon: '💨',
-            keywords: 'tailwind css 框架 tailwindcss' },
-            { name: 'React', url: 'https://react.dev', icon: '⚛️', keywords: 'react 文档 框架' },
-            { name: 'Vue', url: 'https://vuejs.org', icon: '💚', keywords: 'vue vuejs 框架' },
-            { name: 'Node.js', url: 'https://nodejs.org', icon: '🟢', keywords: 'node nodejs 运行时' },
-        ];
-
-        // Emoji 选项
         const EMOJI_OPTIONS = ['🔗', '📁', '🌟', '💻', '🔧', '📌', '🚀', '🎯', '📎', '🏠', '🔖', '💡', '🔥', '✨', '🧩',
             '📡', '🗂️', '⚡'
         ];
@@ -942,7 +861,7 @@
         const $urlInput = document.getElementById('urlInput');
         const $inputClear = document.getElementById('inputClear');
         const $goBtn = document.getElementById('goBtn');
-        const $suggestions = document.getElementById('suggestions');
+        const $historyDropdown = document.getElementById('historyDropdown');
         const $modalOverlay = document.getElementById('modalOverlay');
         const $modalName = document.getElementById('modalName');
         const $modalUrl = document.getElementById('modalUrl');
@@ -950,21 +869,103 @@
         const $modalCancel = document.getElementById('modalCancel');
         const $modalSave = document.getElementById('modalSave');
         const $toast = document.getElementById('toast');
-        const $inputSection = document.getElementById('inputSection');
 
         // ==================== 状态 ====================
         let customEntries = [];
+        let historyEntries = [];
         let editMode = false;
         let longPressTimer = null;
         let selectedEmoji = '🔗';
         let toastTimer = null;
 
-        // ==================== 初始化 ====================
+        // ==================== 历史记录管理 ====================
+        function loadHistory() {
+            try {
+                const raw = localStorage.getItem(STORAGE_HISTORY);
+                historyEntries = raw ? JSON.parse(raw) : [];
+                if (!Array.isArray(historyEntries)) historyEntries = [];
+                // 清理无效数据
+                historyEntries = historyEntries.filter(
+                    h => h && typeof h.url === 'string' && h.url.trim().length > 0
+                );
+            } catch (e) {
+                historyEntries = [];
+            }
+        }
+
+        function saveHistory() {
+            try {
+                // 限制数量
+                if (historyEntries.length > MAX_HISTORY) {
+                    historyEntries = historyEntries.slice(0, MAX_HISTORY);
+                }
+                localStorage.setItem(STORAGE_HISTORY, JSON.stringify(historyEntries));
+            } catch (e) {
+                // 存储空间不足，移除最旧的一半
+                historyEntries = historyEntries.slice(0, Math.floor(MAX_HISTORY / 2));
+                try {
+                    localStorage.setItem(STORAGE_HISTORY, JSON.stringify(historyEntries));
+                } catch (e2) { /* 放弃 */ }
+            }
+        }
+
+        function addHistory(url, title) {
+            if (!url || url.trim().length === 0) return;
+            const trimmedUrl = url.trim();
+            // 移除已存在的相同URL
+            historyEntries = historyEntries.filter(h => h.url !== trimmedUrl);
+            // 添加到开头
+            const entry = {
+                url: trimmedUrl,
+                title: title || extractDomain(trimmedUrl),
+                time: Date.now(),
+            };
+            historyEntries.unshift(entry);
+            // 限制数量
+            if (historyEntries.length > MAX_HISTORY) {
+                historyEntries = historyEntries.slice(0, MAX_HISTORY);
+            }
+            saveHistory();
+        }
+
+        function extractDomain(url) {
+            try {
+                const u = new URL(url);
+                return u.hostname;
+            } catch (e) {
+                // 可能是 file:// 协议
+                if (url.startsWith('file://')) {
+                    const parts = url.split('/');
+                    const last = parts[parts.length - 1];
+                    return last || '本地文件';
+                }
+                return url.length > 40 ? url.substring(0, 40) + '…' : url;
+            }
+        }
+
+        function getHistoryTitle(entry) {
+            if (entry.title && entry.title !== extractDomain(entry.url)) {
+                return entry.title;
+            }
+            // 对于导航页自身，特殊标记
+            if (entry.url === location.href) {
+                return '📌 导航页（当前页面）';
+            }
+            return extractDomain(entry.url);
+        }
+
+        // 页面加载时记录自身地址
+        function recordCurrentPage() {
+            const currentUrl = location.href;
+            const pageTitle = document.title || '导航页';
+            addHistory(currentUrl, '📌 ' + pageTitle);
+        }
+
+        // ==================== 自定义入口管理 ====================
         function loadCustomEntries() {
             try {
-                const raw = localStorage.getItem(STORAGE_KEY);
+                const raw = localStorage.getItem(STORAGE_ENTRIES);
                 customEntries = raw ? JSON.parse(raw) : [];
-                // 验证数据结构
                 if (!Array.isArray(customEntries)) customEntries = [];
                 customEntries = customEntries.filter(
                     e => e && typeof e.name === 'string' && typeof e.url === 'string'
@@ -976,7 +977,7 @@
 
         function saveCustomEntries() {
             try {
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(customEntries));
+                localStorage.setItem(STORAGE_ENTRIES, JSON.stringify(customEntries));
             } catch (e) {
                 showToast('存储空间不足，请清理一些入口');
             }
@@ -990,7 +991,6 @@
         function renderNavCards() {
             const entries = getAllEntries();
             let html = '';
-
             entries.forEach((entry, index) => {
                 const isCustom = !entry.isDefault;
                 html += `
@@ -1001,6 +1001,7 @@
                    data-index="${index}"
                    data-custom="${isCustom ? '1' : '0'}"
                    data-entry-name="${escapeAttr(entry.name)}"
+                   data-entry-url="${escapeAttr(entry.url)}"
                    title="${escapeAttr(entry.name)} · ${escapeAttr(entry.url)}">
                     <div class="nav-card-icon">${escapeHtml(entry.icon)}</div>
                     <div class="nav-card-info">
@@ -1010,23 +1011,17 @@
                     ${isCustom ? '<button class="nav-card-delete" data-action="delete" aria-label="删除">✕</button>' : ''}
                 </a>`;
             });
-
-            // 添加按钮卡片
             html += `
             <div class="nav-card nav-card-add" id="addCardBtn" role="button" aria-label="添加入口">
                 <span class="add-icon">+</span>
                 <span class="add-text">添加入口</span>
             </div>`;
-
             $navGrid.innerHTML = html;
-
-            // 绑定事件
             bindCardEvents();
             updateEditHint();
         }
 
         function bindCardEvents() {
-            // 添加按钮
             const addCard = document.getElementById('addCardBtn');
             if (addCard) {
                 addCard.addEventListener('click', (e) => {
@@ -1035,14 +1030,12 @@
                 });
             }
 
-            // 所有导航卡片
             const cards = $navGrid.querySelectorAll('.nav-card:not(.nav-card-add)');
             cards.forEach(card => {
                 // 长按进入编辑模式
                 card.addEventListener('touchstart', handleLongPressStart, { passive: true });
                 card.addEventListener('touchend', handleLongPressEnd);
                 card.addEventListener('touchmove', handleLongPressCancel, { passive: true });
-                // 鼠标长按（桌面调试）
                 card.addEventListener('mousedown', handleLongPressStart);
                 card.addEventListener('mouseup', handleLongPressEnd);
                 card.addEventListener('mouseleave', handleLongPressCancel);
@@ -1053,10 +1046,8 @@
                     deleteBtn.addEventListener('click', (e) => {
                         e.preventDefault();
                         e.stopPropagation();
-                        const entryName = card.dataset.entryName;
-                        handleDeleteEntry(entryName);
+                        handleDeleteEntry(card.dataset.entryName);
                     });
-                    // 防止删除按钮触发长按
                     deleteBtn.addEventListener('touchstart', (e) => {
                         e.stopPropagation();
                         handleLongPressCancel();
@@ -1067,18 +1058,28 @@
                     });
                 }
 
-                // 如果在编辑模式下点击卡片（非删除按钮），阻止跳转并退出编辑模式
+                // 点击卡片：记录历史 + 跳转（非编辑模式）
                 card.addEventListener('click', function(e) {
                     if (editMode && !e.target.closest('.nav-card-delete')) {
                         e.preventDefault();
                         exitEditMode();
+                        return;
+                    }
+                    // 非编辑模式：记录到历史
+                    if (!editMode && !e.target.closest('.nav-card-delete')) {
+                        const url = card.dataset.entryUrl;
+                        const name = card.dataset.entryName;
+                        if (url) {
+                            addHistory(url, name);
+                        }
                     }
                 });
             });
 
-            // 点击空白区域退出编辑模式
+            // 点击空白退出编辑模式
             document.addEventListener('click', function(e) {
-                if (editMode && !e.target.closest('.nav-card') && !e.target.closest('#addCardBtn')) {
+                if (editMode && !e.target.closest('.nav-card') && !e.target.closest('#addCardBtn') && !e
+                    .target.closest('.nav-card-delete')) {
                     exitEditMode();
                 }
             });
@@ -1088,22 +1089,13 @@
             if (editMode) return;
             longPressTimer = setTimeout(() => {
                 enterEditMode();
-                // 触觉反馈（如果支持）
-                if (navigator.vibrate) {
-                    navigator.vibrate(15);
-                }
+                if (navigator.vibrate) navigator.vibrate(15);
             }, 600);
         }
-
-        function handleLongPressEnd(e) {
-            clearTimeout(longPressTimer);
-            longPressTimer = null;
-        }
-
-        function handleLongPressCancel(e) {
-            clearTimeout(longPressTimer);
-            longPressTimer = null;
-        }
+        function handleLongPressEnd() { clearTimeout(longPressTimer);
+            longPressTimer = null; }
+        function handleLongPressCancel() { clearTimeout(longPressTimer);
+            longPressTimer = null; }
 
         function enterEditMode() {
             if (editMode) return;
@@ -1123,39 +1115,27 @@
         function updateAllCardDeleteVisibility() {
             const cards = $navGrid.querySelectorAll('.nav-card[data-custom="1"]');
             cards.forEach(card => {
-                if (editMode) {
-                    card.classList.add('show-delete');
-                } else {
-                    card.classList.remove('show-delete');
-                }
+                card.classList.toggle('show-delete', editMode);
             });
         }
 
         function updateEditHint() {
             const hasCustom = customEntries.length > 0;
-            if (editMode && hasCustom) {
-                $editHint.classList.add('visible');
-            } else {
-                $editHint.classList.remove('visible');
-            }
+            $editHint.classList.toggle('visible', editMode && hasCustom);
         }
 
         function handleDeleteEntry(name) {
-            // 找到并删除自定义入口
             const idx = customEntries.findIndex(e => e.name === name);
             if (idx >= 0) {
                 const removed = customEntries[idx];
                 customEntries.splice(idx, 1);
                 saveCustomEntries();
                 renderNavCards();
-                // 保持编辑模式
                 editMode = true;
                 updateAllCardDeleteVisibility();
                 updateEditHint();
                 showToast(`已删除「${removed.name}」`);
-                if (customEntries.length === 0) {
-                    exitEditMode();
-                }
+                if (customEntries.length === 0) exitEditMode();
             }
         }
 
@@ -1165,16 +1145,14 @@
             EMOJI_OPTIONS.forEach(emoji => {
                 const sel = selectedEmoji === emoji ? ' selected' : '';
                 html +=
-                    `<button class="emoji-option${sel}" data-emoji="${emoji}" aria-label="选择图标 ${emoji}">${emoji}</button>`;
+                    `<button class="emoji-option${sel}" data-emoji="${emoji}" aria-label="图标 ${emoji}">${emoji}</button>`;
             });
             $emojiPicker.innerHTML = html;
-
-            // 绑定选择事件
             $emojiPicker.querySelectorAll('.emoji-option').forEach(btn => {
                 btn.addEventListener('click', () => {
                     selectedEmoji = btn.dataset.emoji;
-                    $emojiPicker.querySelectorAll('.emoji-option').forEach(b => b
-                        .classList.remove('selected'));
+                    $emojiPicker.querySelectorAll('.emoji-option').forEach(b => b.classList
+                        .remove('selected'));
                     btn.classList.add('selected');
                 });
             });
@@ -1186,7 +1164,6 @@
             $modalUrl.value = '';
             renderEmojiPicker();
             $modalOverlay.classList.add('active');
-            // 聚焦名称输入框
             setTimeout(() => $modalName.focus(), 350);
         }
 
@@ -1199,17 +1176,10 @@
         function handleSaveEntry() {
             const name = $modalName.value.trim();
             let url = $modalUrl.value.trim();
-
-            if (!name) {
-                showToast('请输入名称');
-                $modalName.focus();
-                return;
-            }
-            if (!url) {
-                showToast('请输入网址');
-                $modalUrl.focus();
-                return;
-            }
+            if (!name) { showToast('请输入名称');
+                $modalName.focus(); return; }
+            if (!url) { showToast('请输入网址');
+                $modalUrl.focus(); return; }
 
             // 自动补全协议
             if (!/^https?:\/\//i.test(url)) {
@@ -1226,22 +1196,13 @@
                 }
             }
 
-            // 检查重复
             const allEntries = getAllEntries();
             const duplicate = allEntries.find(
                 e => e.name === name || e.url.toLowerCase() === url.toLowerCase()
             );
-            if (duplicate) {
-                showToast('该名称或网址已存在');
-                return;
-            }
+            if (duplicate) { showToast('该名称或网址已存在'); return; }
 
-            // 添加
-            customEntries.push({
-                name,
-                url,
-                icon: selectedEmoji,
-            });
+            customEntries.push({ name, url, icon: selectedEmoji });
             saveCustomEntries();
             renderNavCards();
             closeAddModal();
@@ -1251,163 +1212,36 @@
         $modalCancel.addEventListener('click', closeAddModal);
         $modalSave.addEventListener('click', handleSaveEntry);
         $modalOverlay.addEventListener('click', function(e) {
-            if (e.target === $modalOverlay) {
-                closeAddModal();
-            }
+            if (e.target === $modalOverlay) closeAddModal();
         });
-
-        // 弹窗中回车保存
         $modalUrl.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                handleSaveEntry();
-            }
+            if (e.key === 'Enter') { e.preventDefault();
+                handleSaveEntry(); }
         });
         $modalName.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                $modalUrl.focus();
-            }
+            if (e.key === 'Enter') { e.preventDefault();
+                $modalUrl.focus(); }
         });
 
-        // ==================== 推荐系统 ====================
-        function getFilteredSuggestions(query) {
-            if (!query || query.trim().length === 0) return [];
+        // ==================== 历史记录下拉 ====================
+        function getFilteredHistory(query) {
+            if (!query || query.trim().length === 0) {
+                // 返回全部历史记录（最多10条用于显示）
+                return historyEntries.slice(0, 10);
+            }
             const q = query.toLowerCase().trim();
-            const results = [];
-
-            SUGGESTION_LIBRARY.forEach(item => {
-                const searchStr = `${item.name} ${item.url} ${item.keywords}`.toLowerCase();
-                if (searchStr.includes(q)) {
-                    // 计算匹配得分（名称匹配优先）
-                    let score = 0;
-                    if (item.name.toLowerCase().includes(q)) score += 100;
-                    if (item.name.toLowerCase().startsWith(q)) score += 50;
-                    if (item.keywords.toLowerCase().includes(q)) score += 30;
-                    if (item.url.toLowerCase().includes(q)) score += 10;
-                    results.push({ ...item, score });
-                }
-            });
-
-            // 按得分排序，取前8个
-            results.sort((a, b) => b.score - a.score);
-            return results.slice(0, 8);
-        }
-
-        function renderSuggestions(suggestions, query) {
-            if (!suggestions || suggestions.length === 0) {
-                // 检查是否是URL或搜索词
-                if (query && query.trim().length > 0) {
-                    const trimmed = query.trim();
-                    const isUrl = looksLikeUrl(trimmed);
-                    let html = '';
-                    if (isUrl) {
-                        const fullUrl = normalizeUrl(trimmed);
-                        html = `
-                        <div class="suggestion-item" data-url="${escapeAttr(fullUrl)}" data-action="open">
-                            <div class="suggestion-icon">🔗</div>
-                            <div class="suggestion-info">
-                                <div class="suggestion-name">打开网址</div>
-                                <div class="suggestion-url">${escapeHtml(fullUrl)}</div>
-                            </div>
-                            <span class="suggestion-action">前往 →</span>
-                        </div>`;
-                    } else {
-                        html = `
-                        <div class="suggestion-item search-action" data-search="${escapeAttr(trimmed)}" data-action="search">
-                            <div class="suggestion-icon">🔍</div>
-                            <div class="suggestion-info">
-                                <div class="suggestion-name">搜索「${escapeHtml(trimmed)}」</div>
-                                <div class="suggestion-url">使用百度搜索</div>
-                            </div>
-                            <span class="suggestion-action">搜索</span>
-                        </div>`;
-                    }
-                    $suggestions.innerHTML = html;
-                    $suggestions.classList.add('active');
-                    bindSuggestionEvents();
-                } else {
-                    $suggestions.innerHTML = '';
-                    $suggestions.classList.remove('active');
-                }
-                return;
-            }
-
-            let html = '';
-            suggestions.forEach(item => {
-                html += `
-                <div class="suggestion-item" data-url="${escapeAttr(item.url)}" data-action="open">
-                    <div class="suggestion-icon">${escapeHtml(item.icon)}</div>
-                    <div class="suggestion-info">
-                        <div class="suggestion-name">${escapeHtml(item.name)}</div>
-                        <div class="suggestion-url">${escapeHtml(item.url)}</div>
-                    </div>
-                    <span class="suggestion-action">打开</span>
-                </div>`;
-            });
-
-            // 如果输入看起来也像URL，追加一个"直接打开"选项
-            const trimmed = query.trim();
-            if (looksLikeUrl(trimmed) && !suggestions.some(s => s.url.toLowerCase() === normalizeUrl(trimmed)
-                    .toLowerCase())) {
-                const fullUrl = normalizeUrl(trimmed);
-                html += `
-                <div class="suggestion-item" data-url="${escapeAttr(fullUrl)}" data-action="open" style="border-top: 1px dashed #e5e7eb;">
-                    <div class="suggestion-icon">🔗</div>
-                    <div class="suggestion-info">
-                        <div class="suggestion-name">直接打开</div>
-                        <div class="suggestion-url">${escapeHtml(fullUrl)}</div>
-                    </div>
-                    <span class="suggestion-action">前往 →</span>
-                </div>`;
-            }
-
-            $suggestions.innerHTML = html;
-            $suggestions.classList.add('active');
-            bindSuggestionEvents();
-        }
-
-        function bindSuggestionEvents() {
-            const items = $suggestions.querySelectorAll('.suggestion-item');
-            items.forEach(item => {
-                item.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    const action = item.dataset.action;
-                    if (action === 'open') {
-                        const url = item.dataset.url;
-                        if (url) {
-                            window.open(url, '_blank', 'noopener,noreferrer');
-                            $urlInput.value = '';
-                            $suggestions.classList.remove('active');
-                            $suggestions.innerHTML = '';
-                            updateClearButton();
-                        }
-                    } else if (action === 'search') {
-                        const query = item.dataset.search;
-                        if (query) {
-                            const searchUrl =
-                                'https://www.baidu.com/s?wd=' + encodeURIComponent(query);
-                            window.open(searchUrl, '_blank', 'noopener,noreferrer');
-                            $urlInput.value = '';
-                            $suggestions.classList.remove('active');
-                            $suggestions.innerHTML = '';
-                            updateClearButton();
-                        }
-                    }
-                });
-            });
+            return historyEntries.filter(h => {
+                const searchStr = `${h.title || ''} ${h.url}`.toLowerCase();
+                return searchStr.includes(q);
+            }).slice(0, 8);
         }
 
         function looksLikeUrl(str) {
             if (!str) return false;
             const trimmed = str.trim();
-            // 已包含协议
             if (/^https?:\/\//i.test(trimmed)) return true;
-            // localhost
             if (/^localhost(:\d+)?(\/\S*)?$/i.test(trimmed)) return true;
-            // 包含域名特征
             if (/^[\w.-]+\.[a-z]{2,}(\/\S*)?$/i.test(trimmed) && !/\s/.test(trimmed)) return true;
-            // 包含端口号的IP或域名
             if (/^[\w.-]+:\d{2,5}(\/\S*)?$/i.test(trimmed) && !/\s/.test(trimmed)) return true;
             return false;
         }
@@ -1419,58 +1253,159 @@
             return 'https://' + trimmed;
         }
 
-        function updateClearButton() {
-            if ($urlInput.value.trim().length > 0) {
-                $inputClear.classList.add('visible');
-            } else {
-                $inputClear.classList.remove('visible');
+        function renderHistoryDropdown(filteredHistory, query) {
+            const hasQuery = query && query.trim().length > 0;
+
+            if (!hasQuery && filteredHistory.length === 0) {
+                $historyDropdown.innerHTML = '';
+                $historyDropdown.classList.remove('active');
+                return;
             }
+
+            let html = '';
+
+            // 无查询时显示标题
+            if (!hasQuery && filteredHistory.length > 0) {
+                html +=
+                    '<div class="history-header">📋 最近访问</div>';
+            }
+
+            // 渲染历史记录项
+            filteredHistory.forEach(h => {
+                const displayTitle = getHistoryTitle(h);
+                html += `
+                <div class="history-item" data-url="${escapeAttr(h.url)}" data-action="open">
+                    <div class="history-item-icon">🕐</div>
+                    <div class="history-item-info">
+                        <div class="history-item-title">${escapeHtml(displayTitle)}</div>
+                        <div class="history-item-url">${escapeHtml(h.url)}</div>
+                    </div>
+                    <span class="history-item-action">打开</span>
+                </div>`;
+            });
+
+            // 有查询但无匹配时，提供搜索/打开选项
+            if (hasQuery && filteredHistory.length === 0) {
+                const trimmed = query.trim();
+                if (looksLikeUrl(trimmed)) {
+                    const fullUrl = normalizeUrl(trimmed);
+                    html = `
+                    <div class="history-item" data-url="${escapeAttr(fullUrl)}" data-action="open">
+                        <div class="history-item-icon">🔗</div>
+                        <div class="history-item-info">
+                            <div class="history-item-title">打开网址</div>
+                            <div class="history-item-url">${escapeHtml(fullUrl)}</div>
+                        </div>
+                        <span class="history-item-action">前往 →</span>
+                    </div>`;
+                } else {
+                    html = `
+                    <div class="history-item history-search-action" data-search="${escapeAttr(trimmed)}" data-action="search">
+                        <div class="history-item-icon">🔍</div>
+                        <div class="history-item-info">
+                            <div class="history-item-title">搜索「${escapeHtml(trimmed)}」</div>
+                            <div class="history-item-url">使用百度搜索</div>
+                        </div>
+                        <span class="history-item-action">搜索</span>
+                    </div>`;
+                }
+            }
+
+            // 有查询且有匹配，且查询像URL但不在历史中，追加"直接打开"
+            if (hasQuery && filteredHistory.length > 0 && looksLikeUrl(query.trim())) {
+                const fullUrl = normalizeUrl(query.trim());
+                const alreadyInResults = filteredHistory.some(h => h.url.toLowerCase() === fullUrl.toLowerCase());
+                if (!alreadyInResults) {
+                    html += `
+                    <div class="history-item" data-url="${escapeAttr(fullUrl)}" data-action="open" style="border-top: 1px dashed #e5e7eb;">
+                        <div class="history-item-icon">🔗</div>
+                        <div class="history-item-info">
+                            <div class="history-item-title">直接打开</div>
+                            <div class="history-item-url">${escapeHtml(fullUrl)}</div>
+                        </div>
+                        <span class="history-item-action">前往 →</span>
+                    </div>`;
+                }
+            }
+
+            $historyDropdown.innerHTML = html;
+            $historyDropdown.classList.add('active');
+            bindHistoryItemEvents();
+        }
+
+        function bindHistoryItemEvents() {
+            const items = $historyDropdown.querySelectorAll('.history-item');
+            items.forEach(item => {
+                item.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const action = item.dataset.action;
+                    if (action === 'open') {
+                        const url = item.dataset.url;
+                        if (url) {
+                            // 更新历史记录（移到最前面）
+                            addHistory(url, extractDomain(url));
+                            window.open(url, '_blank', 'noopener,noreferrer');
+                            $urlInput.value = '';
+                            $historyDropdown.classList.remove('active');
+                            $historyDropdown.innerHTML = '';
+                            updateClearButton();
+                        }
+                    } else if (action === 'search') {
+                        const searchQuery = item.dataset.search;
+                        if (searchQuery) {
+                            const searchUrl = 'https://www.baidu.com/s?wd=' + encodeURIComponent(
+                                searchQuery);
+                            window.open(searchUrl, '_blank', 'noopener,noreferrer');
+                            $urlInput.value = '';
+                            $historyDropdown.classList.remove('active');
+                            $historyDropdown.innerHTML = '';
+                            updateClearButton();
+                        }
+                    }
+                });
+            });
+        }
+
+        function updateClearButton() {
+            $inputClear.classList.toggle('visible', $urlInput.value.trim().length > 0);
         }
 
         function handleInputChange() {
             const query = $urlInput.value;
             updateClearButton();
-            const suggestions = getFilteredSuggestions(query);
-            renderSuggestions(suggestions, query);
+            const filtered = getFilteredHistory(query);
+            renderHistoryDropdown(filtered, query);
         }
 
         function handleGoAction() {
             const query = $urlInput.value.trim();
             if (!query) return;
 
-            // 先检查推荐列表是否可见且有匹配项
-            const suggestions = getFilteredSuggestions(query);
-            if (suggestions.length > 0) {
-                // 打开第一个推荐
-                window.open(suggestions[0].url, '_blank', 'noopener,noreferrer');
-                $urlInput.value = '';
-                $suggestions.classList.remove('active');
-                $suggestions.innerHTML = '';
-                updateClearButton();
-                return;
-            }
-
-            // 判断是URL还是搜索
-            if (looksLikeUrl(query)) {
-                window.open(normalizeUrl(query), '_blank', 'noopener,noreferrer');
+            // 先看历史记录中是否有匹配
+            const filtered = getFilteredHistory(query);
+            if (filtered.length > 0) {
+                const url = filtered[0].url;
+                addHistory(url, filtered[0].title || extractDomain(url));
+                window.open(url, '_blank', 'noopener,noreferrer');
+            } else if (looksLikeUrl(query)) {
+                const url = normalizeUrl(query);
+                addHistory(url, extractDomain(url));
+                window.open(url, '_blank', 'noopener,noreferrer');
             } else {
-                // 搜索
                 const searchUrl = 'https://www.baidu.com/s?wd=' + encodeURIComponent(query);
                 window.open(searchUrl, '_blank', 'noopener,noreferrer');
             }
 
             $urlInput.value = '';
-            $suggestions.classList.remove('active');
-            $suggestions.innerHTML = '';
+            $historyDropdown.classList.remove('active');
+            $historyDropdown.innerHTML = '';
             updateClearButton();
         }
 
         // ==================== 事件绑定 ====================
         $urlInput.addEventListener('input', handleInputChange);
         $urlInput.addEventListener('focus', function() {
-            if ($urlInput.value.trim().length > 0) {
-                handleInputChange();
-            }
+            handleInputChange();
         });
         $urlInput.addEventListener('keydown', function(e) {
             if (e.key === 'Enter') {
@@ -1479,36 +1414,32 @@
             }
         });
         $urlInput.addEventListener('blur', function() {
-            // 延迟隐藏，让用户有时间点击推荐项
             setTimeout(() => {
-                if (!document.activeElement || !document.activeElement.closest('#suggestions')) {
-                    $suggestions.classList.remove('active');
+                if (!document.activeElement || !document.activeElement.closest('#historyDropdown')) {
+                    $historyDropdown.classList.remove('active');
                 }
             }, 200);
         });
 
         $inputClear.addEventListener('click', function() {
             $urlInput.value = '';
-            $suggestions.classList.remove('active');
-            $suggestions.innerHTML = '';
+            $historyDropdown.classList.remove('active');
+            $historyDropdown.innerHTML = '';
             updateClearButton();
             $urlInput.focus();
         });
 
         $goBtn.addEventListener('click', handleGoAction);
 
-        // 推荐列表获得焦点时保持显示
-        $suggestions.addEventListener('mousedown', function(e) {
+        // 下拉项获得焦点时保持显示
+        $historyDropdown.addEventListener('mousedown', function(e) {
             e.preventDefault();
         });
-        $suggestions.addEventListener('touchstart', function(e) {
-            // 不阻止默认，让点击事件正常触发
-        });
 
-        // 点击页面其他地方关闭推荐列表
+        // 点击其他地方关闭下拉
         document.addEventListener('click', function(e) {
-            if (!e.target.closest('#inputSection') && !e.target.closest('#suggestions')) {
-                $suggestions.classList.remove('active');
+            if (!e.target.closest('#inputSection') && !e.target.closest('#historyDropdown')) {
+                $historyDropdown.classList.remove('active');
             }
         });
 
@@ -1529,28 +1460,14 @@
             const hour = now.getHours();
             let greetingText = '';
             let emoji = '';
-            if (hour >= 6 && hour < 9) {
-                greetingText = '早上好';
-                emoji = '🌅';
-            } else if (hour >= 9 && hour < 12) {
-                greetingText = '上午好';
-                emoji = '☀️';
-            } else if (hour >= 12 && hour < 14) {
-                greetingText = '中午好';
-                emoji = '🌞';
-            } else if (hour >= 14 && hour < 18) {
-                greetingText = '下午好';
-                emoji = '🌤️';
-            } else if (hour >= 18 && hour < 21) {
-                greetingText = '傍晚好';
-                emoji = '🌆';
-            } else if (hour >= 21 && hour < 24) {
-                greetingText = '晚上好';
-                emoji = '🌙';
-            } else {
-                greetingText = '夜深了';
-                emoji = '🌃';
-            }
+            if (hour >= 6 && hour < 9) { greetingText = '早上好';
+                emoji = '🌅'; } else if (hour >= 9 && hour < 12) { greetingText = '上午好';
+                emoji = '☀️'; } else if (hour >= 12 && hour < 14) { greetingText = '中午好';
+                emoji = '🌞'; } else if (hour >= 14 && hour < 18) { greetingText = '下午好';
+                emoji = '🌤️'; } else if (hour >= 18 && hour < 21) { greetingText = '傍晚好';
+                emoji = '🌆'; } else if (hour >= 21 && hour < 24) { greetingText = '晚上好';
+                emoji = '🌙'; } else { greetingText = '夜深了';
+                emoji = '🌃'; }
             $greeting.innerHTML = `${greetingText} <span class="wave">${emoji}</span>`;
         }
 
@@ -1559,9 +1476,7 @@
             if (toastTimer) clearTimeout(toastTimer);
             $toast.textContent = message;
             $toast.classList.add('show');
-            toastTimer = setTimeout(() => {
-                $toast.classList.remove('show');
-            }, 1800);
+            toastTimer = setTimeout(() => $toast.classList.remove('show'), 1800);
         }
 
         // ==================== 工具函数 ====================
@@ -1577,14 +1492,16 @@
 
         // ==================== 启动 ====================
         function init() {
+            loadHistory();
             loadCustomEntries();
+            // 记录当前页面地址到历史
+            recordCurrentPage();
             renderNavCards();
             renderEmojiPicker();
             updateTime();
             updateClearButton();
+
             // 每分钟更新时间
-            setInterval(updateTime, 30000);
-            // 初始时也更新一次（秒级精度在下一分钟刷新）
             const secondsUntilNextMinute = 60 - new Date().getSeconds();
             setTimeout(() => {
                 updateTime();
@@ -1592,7 +1509,6 @@
             }, secondsUntilNextMinute * 1000);
         }
 
-        // 页面加载完成后初始化
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', init);
         } else {
@@ -1614,22 +1530,24 @@
                 $urlInput.focus();
                 $urlInput.select();
             }
-            // Escape 关闭弹窗或退出编辑模式
+            // Escape
             if (e.key === 'Escape') {
                 if ($modalOverlay.classList.contains('active')) {
                     closeAddModal();
                 } else if (editMode) {
                     exitEditMode();
+                } else if ($historyDropdown.classList.contains('active')) {
+                    $historyDropdown.classList.remove('active');
                 }
             }
         });
 
         console.log('🚀 导航页已就绪');
         console.log('  📌 默认入口：项目管理 | Gitee | GitHub');
+        console.log('  📋 历史记录：自动记录访问过的地址（最多' + MAX_HISTORY + '条）');
         console.log('  ➕ 点击 + 卡片或按 / 键聚焦输入框');
-        console.log('  ✏️  长按卡片进入编辑模式，可删除自定义入口');
-        console.log('  💾 自定义入口存储在 localStorage');
-        console.log('  🔍 输入框支持智能推荐链接');
+        console.log('  ✏️  长按卡片进入编辑模式');
+        console.log('  💾 数据存储在 localStorage');
     })();
 </script>
 </body>
