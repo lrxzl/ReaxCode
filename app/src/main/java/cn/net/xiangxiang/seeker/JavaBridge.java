@@ -89,7 +89,7 @@ public class JavaBridge {
     @JavascriptInterface
     public void openWebView(String url) {
         log.info("[openWebView] url=" + url);
-        openFloatingWebView(url);
+        openFloatingWebView(url, null);
     }
 
     // ==================== 同步入口（向后兼容，仅适用于快速操作） ====================
@@ -263,7 +263,12 @@ public class JavaBridge {
 
             case "openOrGetWebViewByUrl": {
                 String url = args.get(0).asText();
-                    return openOrGetWebViewByUrl(url);
+                if (args.size() > 1) {
+                    String specifiedId = args.get(1).asText();
+                    return openOrGetWebViewByUrl(url, specifiedId);
+                } else {
+                    return openOrGetWebViewByUrl(url, null);
+                }
             }
 
             case "getCurrentWebViewListInfos": {
@@ -321,7 +326,7 @@ public class JavaBridge {
      * 2. 若达到 MAX_WEB_VIEW_COUNT 上限，自动关闭最老的（LinkedHashMap 第一个 entry）
      * 3. 创建新的浮动 WebView 并返回 id
      */
-    public String openOrGetWebViewByUrl(String url) throws Exception {
+    public String openOrGetWebViewByUrl(String url, String specifiedId) throws Exception {
         synchronized (floatingWebViewMap) {
             // 2. 超过上限则关闭最老的 — LinkedHashMap 第一个 entry 就是最老的
             while (floatingWebViewMap.size() >= JavaBridgeConstants.MAX_WEB_VIEW_COUNT) {
@@ -332,13 +337,13 @@ public class JavaBridge {
         }
 
         // 3. 创建新的浮动 WebView
-        String newId = openFloatingWebView(url);
+        String newId = openFloatingWebView(url, specifiedId);
         log.info("[openOrGetWebViewByUrl] Created new WebView: id=" + newId + ", url=" + url);
         return newId;
     }
 
     /** 打开浮动 WebView，同步返回其 id */
-    public String openFloatingWebView(String url) {
+    public String openFloatingWebView(String url, String specifiedId) {
         final String finalUrl = url;
         final String[] idHolder = new String[1];
         final CountDownLatch latch = new CountDownLatch(1);
@@ -376,7 +381,13 @@ public class JavaBridge {
                 floating.loadUrl(finalUrl);
                 ViewGroup decorView = (ViewGroup) activity.getWindow().getDecorView();
                 decorView.addView(floating);
-                String newId = String.valueOf(JavaBridgeConstants.floatingWebViewIdSeq.incrementAndGet());
+
+                String newId;
+                if (specifiedId == null) {
+                    newId = String.valueOf(JavaBridgeConstants.floatingWebViewIdSeq.incrementAndGet());
+                } else {
+                    newId = specifiedId;
+                }
                 synchronized (floatingWebViewMap) {
                     floatingWebViewMap.put(newId, new WebViewEntry(floating, finalUrl));
                 }
