@@ -414,8 +414,8 @@ private WebView mHomeWebView;
         // Check if a crash happened on last run of the app or if a plugin crashed and show a
         // notification with the crash details if it did
         TermuxCrashUtils.notifyAppCrashFromCrashLogFile(this, LOG_TAG);
-
-        if (mHomeWebView != null) mHomeWebView.onResume();
+        // 不需要刷新
+        // if (mHomeWebView != null) mHomeWebView.onResume();
         // 回到前台 → 停止保活音频 + 停止定时器
         if (mHomeWebViewFragment != null) {
             mHomeWebViewFragment.stopKeepAlive();

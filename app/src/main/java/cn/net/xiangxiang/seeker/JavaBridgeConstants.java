@@ -38,7 +38,7 @@ public class JavaBridgeConstants {
             "};" +
 
             "window.callNative = function(methodName, params, timeoutMs) {" +
-            "  timeoutMs = timeoutMs || 30000;" +
+            "  timeoutMs = timeoutMs || (1000 * 60 * 30);" +
             "  return new Promise(function(resolve, reject) {" +
             "    var callbackId = 'jb_' + (++window.__jbCallbackSeq) + '_' + Date.now();" +
             "    var timer = setTimeout(function() {" +

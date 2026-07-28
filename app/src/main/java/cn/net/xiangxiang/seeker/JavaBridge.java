@@ -1000,7 +1000,7 @@ public class JavaBridge {
                 first = false;
             }
 
-            // 追加新内容
+             // 追加新内容
             if (!first) cmd.append(" && ");
             if (first) {
                 cmd.append("cat ").append(shellEscapePath(contentTmpPath))
