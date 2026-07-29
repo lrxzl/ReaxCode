@@ -52,7 +52,6 @@ public class DevToolsPortForwarder {
 
     private void runAcceptLoop() {
         try {
-            // 同时监听 IPv4 和 IPv6，解决 Node.js 解析 localhost 优先使用 IPv6 的问题
             tryBind("0.0.0.0");
             tryBind("::");
 
@@ -158,14 +157,12 @@ public class DevToolsPortForwarder {
             }
         };
 
-        // 获取客户端访问的目标 IP，用于动态重写 webSocketDebuggerUrl
         String targetIp = tcpSocket.getLocalAddress().getHostAddress();
         if (targetIp.contains(":")) {
-            targetIp = "[" + targetIp + "]"; // IPv6 地址在 URL 中需要加方括号
+            targetIp = "[" + targetIp + "]";
         }
         final String dynamicHost = targetIp + ":" + LOCAL_TCP_PORT;
 
-        // TCP -> Local (上行)：重写 Host 头，绕过 WebView 安全校验
         bridgePool.submit(() -> {
             try {
                 HeaderRewriter rewriter = new HeaderRewriter(true, "localhost:" + LOCAL_TCP_PORT, dynamicHost);
@@ -175,7 +172,6 @@ public class DevToolsPortForwarder {
             }
         });
 
-        // Local -> TCP (下行)：重写响应体中的 ws:// 地址
         bridgePool.submit(() -> {
             try {
                 HeaderRewriter rewriter = new HeaderRewriter(false, "localhost:" + LOCAL_TCP_PORT, dynamicHost);
@@ -208,73 +204,151 @@ public class DevToolsPortForwarder {
         }
     }
 
-    /**
-     * 轻量级 HTTP 头部及内容重写器
-     */
     private static class HeaderRewriter {
-        private enum Mode { REQUEST, RESPONSE_HTTP, RESPONSE_WS, PASSTHROUGH }
-        private Mode currentMode;
+        private enum Mode { REQUEST, RESPONSE_HEADER, RESPONSE_BODY, PASSTHROUGH }
+        private Mode mode;
+        private final boolean isRequest;
         private final String replaceHost;
         private final String replaceWsUrl;
-        private final ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+
+        private final ByteArrayOutputStream headerBuf = new ByteArrayOutputStream();
+        private final ByteArrayOutputStream bodyBuf = new ByteArrayOutputStream();
+        private String savedHeaderStr = "";
+        private int contentLength = -1;
 
         HeaderRewriter(boolean isRequest, String replaceHost, String replaceWsUrl) {
-            this.currentMode = isRequest ? Mode.REQUEST : Mode.RESPONSE_HTTP;
+            this.isRequest = isRequest;
             this.replaceHost = replaceHost;
             this.replaceWsUrl = replaceWsUrl;
+            this.mode = isRequest ? Mode.REQUEST : Mode.RESPONSE_HEADER;
         }
 
         byte[] consume(byte[] data, int len) {
-            // WebSocket 升级后或非 HTTP 数据，直接透传，防止破坏二进制帧
-            if (currentMode == Mode.PASSTHROUGH || currentMode == Mode.RESPONSE_WS) {
+            if (mode == Mode.PASSTHROUGH) {
                 return data.length == len ? data : Arrays.copyOf(data, len);
             }
 
-            buffer.write(data, 0, len);
-            byte[] current = buffer.toByteArray();
-            int idx = indexOf(current, 0, current.length, HEADER_END);
+            if (mode == Mode.REQUEST) {
+                headerBuf.write(data, 0, len);
+                byte[] current = headerBuf.toByteArray();
+                int idx = indexOf(current, 0, current.length, HEADER_END);
+                if (idx >= 0) {
+                    String headerStr = new String(current, 0, idx + 4, StandardCharsets.US_ASCII);
+                    byte[] leftover = Arrays.copyOfRange(current, idx + 4, current.length);
 
-            if (idx < 0) {
-                // 还没读完头部，继续等待
+                    String rewritten = headerStr.replaceAll("(?i)Host: [^\\r\\n]+", "Host: " + replaceHost);
+                    ByteArrayOutputStream out = new ByteArrayOutputStream();
+                    out.write(rewritten.getBytes(StandardCharsets.US_ASCII), 0, rewritten.length());
+                    out.write(leftover, 0, leftover.length);
+
+                    mode = Mode.PASSTHROUGH;
+                    headerBuf.reset();
+                    return out.toByteArray();
+                }
                 return new byte[0];
             }
 
-            String headerStr = new String(current, 0, idx + 4, StandardCharsets.US_ASCII);
-            byte[] remainingBytes = Arrays.copyOfRange(current, idx + 4, current.length);
-
+            // Response 处理
             ByteArrayOutputStream out = new ByteArrayOutputStream();
+            int offset = 0;
+            while (offset < len) {
+                if (mode == Mode.RESPONSE_HEADER) {
+                    int available = len - offset;
+                    headerBuf.write(data, offset, available);
+                    byte[] current = headerBuf.toByteArray();
+                    int idx = indexOf(current, 0, current.length, HEADER_END);
 
-            if (currentMode == Mode.REQUEST) {
-                // 请求方向：强制重写 Host 头
-                String rewritten = headerStr.replaceAll("(?i)Host: [^\\r\\n]+", "Host: " + replaceHost);
-                out.write(rewritten.getBytes(StandardCharsets.US_ASCII), 0, rewritten.length());
-                // 请求头处理完，后续 body 透传
-                currentMode = Mode.PASSTHROUGH;
-                out.write(remainingBytes, 0, remainingBytes.length);
-            } else {
-                // 响应方向：重写头里的 ws:// 地址
-                String rewrittenHeader = headerStr.replaceAll("ws://[^/\"\\s]+:\\d+", "ws://" + replaceWsUrl);
-                out.write(rewrittenHeader.getBytes(StandardCharsets.US_ASCII), 0, rewrittenHeader.length());
+                    if (idx >= 0) {
+                        savedHeaderStr = new String(current, 0, idx + 4, StandardCharsets.US_ASCII);
+                        byte[] leftover = Arrays.copyOfRange(current, idx + 4, current.length);
 
-                String lowerHeader = headerStr.toLowerCase();
-                boolean isWsUpgrade = lowerHeader.contains("upgrade: websocket") || lowerHeader.contains("101 switching protocols");
+                        String lower = savedHeaderStr.toLowerCase();
+                        boolean isWsUpgrade = lower.contains("upgrade: websocket") || lower.contains("101 switching protocols");
+                        boolean isChunked = lower.contains("transfer-encoding: chunked");
 
-                if (isWsUpgrade) {
-                    // WebSocket 握手响应，后续是二进制帧，直接透传
-                    currentMode = Mode.RESPONSE_WS;
-                    out.write(remainingBytes, 0, remainingBytes.length);
+                        contentLength = -1;
+                        int clIdx = lower.indexOf("content-length:");
+                        if (clIdx >= 0) {
+                            int eol = lower.indexOf('\n', clIdx);
+                            String val = lower.substring(clIdx + 15, eol).trim();
+                            try { contentLength = Integer.parseInt(val); } catch (Exception ignored) {}
+                        }
+
+                        headerBuf.reset();
+
+                        if (isWsUpgrade) {
+                            String rewrittenHeader = savedHeaderStr.replaceAll("ws://[^/\"\\s]+:\\d+", "ws://" + replaceWsUrl);
+                            out.write(rewrittenHeader.getBytes(StandardCharsets.US_ASCII), 0, rewrittenHeader.length());
+                            out.write(leftover, 0, leftover.length);
+                            mode = Mode.PASSTHROUGH;
+                            offset = len; // WebSocket 升级后，后续全是二进制帧，直接退出循环透传
+                        } else if (contentLength >= 0) {
+                            mode = Mode.RESPONSE_BODY;
+                            // 把 leftover 当作 body 数据处理，并更新 offset
+                            int bodyOffset = 0;
+                            while (bodyOffset < leftover.length && mode == Mode.RESPONSE_BODY) {
+                                int availableBody = leftover.length - bodyOffset;
+                                int needed = contentLength - bodyBuf.size();
+                                int take = Math.min(availableBody, needed);
+                                bodyBuf.write(leftover, bodyOffset, take);
+                                bodyOffset += take;
+
+                                if (bodyBuf.size() == contentLength) {
+                                    processCompleteBody(out);
+                                    // processCompleteBody 会将 mode 设为 RESPONSE_HEADER，循环继续处理剩余的 leftover
+                                }
+                            }
+                            offset += bodyOffset;
+                        } else if (isChunked) {
+                            String rewrittenHeader = savedHeaderStr.replaceAll("ws://[^/\"\\s]+:\\d+", "ws://" + replaceWsUrl);
+                            out.write(rewrittenHeader.getBytes(StandardCharsets.US_ASCII), 0, rewrittenHeader.length());
+                            out.write(leftover, 0, leftover.length);
+                            mode = Mode.PASSTHROUGH;
+                            offset = len;
+                        } else {
+                            String rewrittenHeader = savedHeaderStr.replaceAll("ws://[^/\"\\s]+:\\d+", "ws://" + replaceWsUrl);
+                            out.write(rewrittenHeader.getBytes(StandardCharsets.US_ASCII), 0, rewrittenHeader.length());
+                            out.write(leftover, 0, leftover.length);
+                            mode = Mode.PASSTHROUGH;
+                            offset = len;
+                        }
+                    } else {
+                        // 没找到完整的 header，等待下一个 TCP 包
+                        offset = len;
+                    }
+                } else if (mode == Mode.RESPONSE_BODY) {
+                    int available = len - offset;
+                    int needed = contentLength - bodyBuf.size();
+                    int take = Math.min(available, needed);
+                    bodyBuf.write(data, offset, take);
+                    offset += take;
+
+                    if (bodyBuf.size() == contentLength) {
+                        processCompleteBody(out);
+                        // mode 变为 RESPONSE_HEADER，while 循环继续处理剩余的 data
+                    }
                 } else {
-                    // 普通 HTTP 响应(如 /json/version)，body 通常是 JSON 且在同一个包里
-                    // 对当前包剩余部分做替换，然后进入透传模式
-                    String remainingStr = new String(remainingBytes, StandardCharsets.US_ASCII);
-                    String rewrittenRemaining = remainingStr.replaceAll("ws://[^/\"\\s]+:\\d+", "ws://" + replaceWsUrl);
-                    out.write(rewrittenRemaining.getBytes(StandardCharsets.US_ASCII), 0, rewrittenRemaining.length());
-                    currentMode = Mode.PASSTHROUGH;
+                    out.write(data, offset, len - offset);
+                    offset = len;
                 }
             }
-
-            buffer.reset();
             return out.toByteArray();
+        }
+
+        private void processCompleteBody(ByteArrayOutputStream out) {
+            String bodyStr = new String(bodyBuf.toByteArray(), StandardCharsets.UTF_8);
+            String rewrittenBody = bodyStr.replaceAll("ws://[^/\"\\s]+:\\d+", "ws://" + replaceWsUrl);
+            byte[] rewrittenBodyBytes = rewrittenBody.getBytes(StandardCharsets.UTF_8);
+
+            String rewrittenHeader = savedHeaderStr
+                .replaceAll("(?i)Content-Length: \\d+", "Content-Length: " + rewrittenBodyBytes.length)
+                .replaceAll("ws://[^/\"\\s]+:\\d+", "ws://" + replaceWsUrl);
+
+            out.write(rewrittenHeader.getBytes(StandardCharsets.US_ASCII), 0, rewrittenHeader.length());
+            out.write(rewrittenBodyBytes, 0, rewrittenBodyBytes.length);
+
+            bodyBuf.reset();
+            mode = Mode.RESPONSE_HEADER; // 恢复状态，准备处理 Keep-Alive 连接上的下一个响应
         }
 
         private static int indexOf(byte[] haystack, int from, int to, byte[] needle) {
