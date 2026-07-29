@@ -10,6 +10,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
@@ -19,7 +20,6 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
 
 public class DevToolsPortForwarder {
 
@@ -27,20 +27,15 @@ public class DevToolsPortForwarder {
     private static final int LOCAL_TCP_PORT = 9222;
     private static final String SOCKET_PREFIX = "webview_devtools_remote";
 
-    // 连接 WebView socket 时的最大重试窗口
     private static final int CONNECT_TIMEOUT_MS = 8000;
     private static final int RETRY_INTERVAL_MS = 300;
-
-    // HTTP 响应头与 chunked/body 边界检测用
     private static final byte[] HEADER_END = "\r\n\r\n".getBytes(StandardCharsets.US_ASCII);
 
     private final Context context;
-    private ServerSocket serverSocket;
+    private final List<ServerSocket> serverSockets = new ArrayList<>();
     private final AtomicBoolean isRunning = new AtomicBoolean(false);
 
-    // 接受 TCP 客户端的线程池（一般 1~2 个足够）
-    private final ExecutorService acceptPool = Executors.newSingleThreadExecutor();
-    // 处理每条连接的桥接线程池
+    private final ExecutorService acceptPool = Executors.newFixedThreadPool(2);
     private final ExecutorService bridgePool = Executors.newCachedThreadPool();
 
     public DevToolsPortForwarder(Context context) {
@@ -57,31 +52,60 @@ public class DevToolsPortForwarder {
 
     private void runAcceptLoop() {
         try {
-            serverSocket = new ServerSocket(LOCAL_TCP_PORT);
-            Log.i(TAG, "TCP 代理服务已启动，监听端口: " + LOCAL_TCP_PORT
-                + "，可用 playwright-cli attach --cdp http://localhost:" + LOCAL_TCP_PORT);
+            // 同时监听 IPv4 和 IPv6，解决 Node.js 解析 localhost 优先使用 IPv6 的问题
+            tryBind("0.0.0.0");
+            tryBind("::");
 
-            while (isRunning.get()) {
-                Socket tcpClient = serverSocket.accept();
-                tcpClient.setKeepAlive(true);
-                tcpClient.setTcpNoDelay(true);   // CDP 消息小且频繁，禁用 Nagle
-                tcpClient.setSoTimeout(0);
-                Log.i(TAG, "客户端已连接: " + tcpClient.getRemoteSocketAddress());
-                bridgePool.submit(() -> handleClient(tcpClient));
+            if (serverSockets.isEmpty()) {
+                throw new IOException("无法绑定任何网络接口");
+            }
+
+            Log.i(TAG, "TCP 代理服务已启动，监听端口: " + LOCAL_TCP_PORT);
+
+            for (ServerSocket ss : serverSockets) {
+                acceptPool.submit(() -> acceptLoop(ss));
             }
         } catch (IOException e) {
             if (isRunning.get()) {
                 Log.e(TAG, "代理服务异常: " + e.getMessage(), e);
             }
-        } finally {
             isRunning.set(false);
+        }
+    }
+
+    private void tryBind(String host) {
+        try {
+            ServerSocket ss = new ServerSocket();
+            ss.setReuseAddress(true);
+            ss.bind(new InetSocketAddress(host, LOCAL_TCP_PORT));
+            serverSockets.add(ss);
+            Log.i(TAG, "成功监听: " + host + ":" + LOCAL_TCP_PORT);
+        } catch (IOException e) {
+            Log.w(TAG, "监听 " + host + " 失败: " + e.getMessage());
+        }
+    }
+
+    private void acceptLoop(ServerSocket serverSocket) {
+        while (isRunning.get()) {
+            try {
+                Socket tcpClient = serverSocket.accept();
+                tcpClient.setKeepAlive(true);
+                tcpClient.setTcpNoDelay(true);
+                tcpClient.setSoTimeout(0);
+                Log.i(TAG, "客户端已连接: " + tcpClient.getRemoteSocketAddress());
+                bridgePool.submit(() -> handleClient(tcpClient));
+            } catch (IOException e) {
+                if (isRunning.get()) {
+                    Log.e(TAG, "Accept 异常: " + e.getMessage());
+                }
+                break;
+            }
         }
     }
 
     private void handleClient(Socket tcpClient) {
         LocalSocket localSocket = null;
         try {
-            // WebView socket 可能晚于 Playwright 连接创建，重试一段时间
             long deadline = System.currentTimeMillis() + CONNECT_TIMEOUT_MS;
             IOException lastError = null;
 
@@ -110,9 +134,8 @@ public class DevToolsPortForwarder {
             }
 
             if (localSocket == null) {
-                Log.e(TAG, "无法连接到任何 WebView Socket，请确保 WebView 调试已开启。"
+                Log.e(TAG, "无法连接到任何 WebView Socket."
                     + (lastError != null ? " 最后错误: " + lastError.getMessage() : ""));
-                // 给客户端一个友好的 HTTP 502 错误，便于 Playwright 报错时排查
                 writeBadGateway(tcpClient);
                 closeQuietly(tcpClient);
                 return;
@@ -125,11 +148,6 @@ public class DevToolsPortForwarder {
         }
     }
 
-    /**
-     * 桥接 TCP 与 LocalSocket。
-     * 对 Playwright 的 /json/version 等 HTTP 请求，会重写 webSocketDebuggerUrl 的 host，
-     * 使其指向 localhost:9222，避免 WebView 返回 0.0.0.0 之类的地址导致 Playwright 连接失败。
-     */
     private void bridge(Socket tcpSocket, LocalSocket localSocket) {
         final AtomicBoolean closed = new AtomicBoolean(false);
         final Runnable cleanup = () -> {
@@ -140,38 +158,36 @@ public class DevToolsPortForwarder {
             }
         };
 
-        // TCP -> Local (上行)：Playwright 发出的请求，原样透传
+        // 获取客户端访问的目标 IP，用于动态重写 webSocketDebuggerUrl
+        String targetIp = tcpSocket.getLocalAddress().getHostAddress();
+        if (targetIp.contains(":")) {
+            targetIp = "[" + targetIp + "]"; // IPv6 地址在 URL 中需要加方括号
+        }
+        final String dynamicHost = targetIp + ":" + LOCAL_TCP_PORT;
+
+        // TCP -> Local (上行)：重写 Host 头，绕过 WebView 安全校验
         bridgePool.submit(() -> {
             try {
-                transfer(tcpSocket.getInputStream(), localSocket.getOutputStream(), null, cleanup);
+                HeaderRewriter rewriter = new HeaderRewriter(true, "localhost:" + LOCAL_TCP_PORT, dynamicHost);
+                transfer(tcpSocket.getInputStream(), localSocket.getOutputStream(), rewriter, cleanup);
             } catch (IOException e) {
-                Log.d(TAG, "上行流打开失败: " + e.getMessage());
                 cleanup.run();
             }
         });
 
-        // Local -> TCP (下行)：WebView 返回的响应，对 /json/* 的 JSON 响应做 host 重写
+        // Local -> TCP (下行)：重写响应体中的 ws:// 地址
         bridgePool.submit(() -> {
             try {
-                OutputStream tcpOut = tcpSocket.getOutputStream();
-                InputStream localIn = localSocket.getInputStream();
-                transfer(localIn, tcpOut, tcpSocket, cleanup);
+                HeaderRewriter rewriter = new HeaderRewriter(false, "localhost:" + LOCAL_TCP_PORT, dynamicHost);
+                transfer(localSocket.getInputStream(), tcpSocket.getOutputStream(), rewriter, cleanup);
             } catch (IOException e) {
-                Log.d(TAG, "下行流打开失败: " + e.getMessage());
                 cleanup.run();
             }
         });
     }
 
-    /**
-     * @param rewriteTcpOut 非 null 时，对 HTTP 响应体中的 ws://xxx:port/... 做重写为 ws://localhost:9222/...
-     *                      仅用于下行（WebView -> Playwright）方向
-     */
-    private void transfer(InputStream in, OutputStream out, Socket rewriteTcpOut, Runnable cleanup) {
+    private void transfer(InputStream in, OutputStream out, HeaderRewriter rewriter, Runnable cleanup) {
         byte[] buffer = new byte[8192];
-        // 如果要重写，需要一个状态机解析 HTTP 响应头与 chunked 编码
-        HttpRewriter rewriter = (rewriteTcpOut != null) ? new HttpRewriter(LOCAL_TCP_PORT) : null;
-
         try {
             int bytesRead;
             while ((bytesRead = in.read(buffer)) != -1) {
@@ -186,211 +202,79 @@ public class DevToolsPortForwarder {
                 out.flush();
             }
         } catch (IOException e) {
-            // 连接断开（正常关闭或对端崩溃）
+            // 连接断开
         } finally {
             cleanup.run();
         }
     }
 
     /**
-     * 一个轻量的 HTTP 响应重写器：
-     * - 解析 status line + headers
-     * - 若 Content-Length 存在，重写 body 中的 "ws://host:port/" -> "ws://localhost:9222/"
-     * - 若 Transfer-Encoding: chunked，重写每个 chunk 的 body
-     * - 其他情况（如 WebSocket 升级后的二进制帧）原样透传
-     * <p>
-     * 这是为了修复 WebView 有时返回 webSocketDebuggerUrl: "ws://0.0.0.0:9222/..." 的问题，
-     * Playwright 会试图连到 0.0.0.0 导致失败。
+     * 轻量级 HTTP 头部及内容重写器
      */
-    private static class HttpRewriter {
-        private enum State { HEADER, BODY_FIXED, BODY_CHUNKED, BODY_EOF, PASSTHROUGH }
+    private static class HeaderRewriter {
+        private enum Mode { REQUEST, RESPONSE_HTTP, RESPONSE_WS, PASSTHROUGH }
+        private Mode currentMode;
+        private final String replaceHost;
+        private final String replaceWsUrl;
+        private final ByteArrayOutputStream buffer = new ByteArrayOutputStream();
 
-        private final int targetPort;
-        private State state = State.HEADER;
-        private final ByteArrayOutputStream headerBuf = new ByteArrayOutputStream();
-        private int remainingBody = -1;
-        private int chunkRemaining = 0;
-        private boolean chunkHeaderPending = true;
-
-        HttpRewriter(int targetPort) {
-            this.targetPort = targetPort;
+        HeaderRewriter(boolean isRequest, String replaceHost, String replaceWsUrl) {
+            this.currentMode = isRequest ? Mode.REQUEST : Mode.RESPONSE_HTTP;
+            this.replaceHost = replaceHost;
+            this.replaceWsUrl = replaceWsUrl;
         }
 
-        byte[] consume(byte[] data, int len) throws IOException {
-            if (state == State.PASSTHROUGH) {
+        byte[] consume(byte[] data, int len) {
+            // WebSocket 升级后或非 HTTP 数据，直接透传，防止破坏二进制帧
+            if (currentMode == Mode.PASSTHROUGH || currentMode == Mode.RESPONSE_WS) {
                 return data.length == len ? data : Arrays.copyOf(data, len);
             }
 
-            ByteArrayOutputStream out = new ByteArrayOutputStream();
-            int offset = 0;
-            while (offset < len) {
-                if (state == State.HEADER) {
-                    int consumed = feedHeader(data, offset, len, out);
-                    offset += consumed;
-                } else if (state == State.BODY_FIXED) {
-                    offset += feedFixedBody(data, offset, len, out);
-                    if (remainingBody == 0) state = State.PASSTHROUGH;
-                } else if (state == State.BODY_CHUNKED) {
-                    offset += feedChunkedBody(data, offset, len, out);
-                } else if (state == State.BODY_EOF) {
-                    // 直接透传到连接关闭
-                    out.write(data, offset, len - offset);
-                    offset = len;
-                } else { // PASSTHROUGH
-                    out.write(data, offset, len - offset);
-                    offset = len;
-                }
-            }
-            return out.toByteArray();
-        }
+            buffer.write(data, 0, len);
+            byte[] current = buffer.toByteArray();
+            int idx = indexOf(current, 0, current.length, HEADER_END);
 
-        private int feedHeader(byte[] data, int offset, int len, ByteArrayOutputStream out) throws IOException {
-            int available = len - offset;
-            int copyLen = Math.min(available, HEADER_END.length - headerBuf.size());
-            if (copyLen > 0) headerBuf.write(data, offset, copyLen);
-
-            // 检查是否已读到 \r\n\r\n
-            byte[] hb = headerBuf.toByteArray();
-            int idx = indexOf(hb, 0, hb.length, HEADER_END);
             if (idx < 0) {
-                // 还没读完头部
-                return copyLen;
+                // 还没读完头部，继续等待
+                return new byte[0];
             }
 
-            // 找到头部结尾，重写头部
-            String headers = new String(hb, 0, idx + 4, StandardCharsets.US_ASCII);
-            String rewrittenHeaders = headers;
+            String headerStr = new String(current, 0, idx + 4, StandardCharsets.US_ASCII);
+            byte[] remainingBytes = Arrays.copyOfRange(current, idx + 4, current.length);
 
-            // 解析 Content-Length 与 Transfer-Encoding
-            String lower = headers.toLowerCase();
-            int contentLength = -1;
-            boolean chunked = false;
-            int clIdx = lower.indexOf("content-length:");
-            if (clIdx >= 0) {
-                int eol = lower.indexOf('\n', clIdx);
-                String val = lower.substring(clIdx + 15, eol).trim();
-                try { contentLength = Integer.parseInt(val); } catch (NumberFormatException ignored) {}
-            }
-            if (lower.contains("transfer-encoding: chunked")) {
-                chunked = true;
-            }
-            boolean isWebSocketUpgrade = lower.contains("upgrade: websocket");
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
 
-            out.write(rewrittenHeaders.getBytes(StandardCharsets.US_ASCII));
-
-            // 处理头部后可能还有部分 body
-            int headerConsumed = (idx + 4);
-            int alreadyInBuffer = hb.length - headerConsumed;
-            int totalConsumed = copyLen;
-            // 把 headerBuf 中超出头部的部分当作 body 处理
-            if (alreadyInBuffer > 0) {
-                byte[] leftover = Arrays.copyOfRange(hb, headerConsumed, hb.length);
-                if (isWebSocketUpgrade) {
-                    // WebSocket 升级响应，之后走二进制，不重写
-                    out.write(leftover, 0, leftover.length);
-                    state = State.PASSTHROUGH;
-                } else if (chunked) {
-                    state = State.BODY_CHUNKED;
-                    chunkHeaderPending = true;
-                    chunkRemaining = 0;
-                    feedChunkedBody(leftover, 0, leftover.length, out);
-                } else if (contentLength >= 0) {
-                    state = State.BODY_FIXED;
-                    remainingBody = contentLength;
-                    feedFixedBody(leftover, 0, leftover.length, out);
-                    if (remainingBody == 0) state = State.PASSTHROUGH;
-                } else {
-                    // 没有 Content-Length 也没有 chunked，body 直到 EOF
-                    state = State.BODY_EOF;
-                    out.write(leftover, 0, leftover.length);
-                }
+            if (currentMode == Mode.REQUEST) {
+                // 请求方向：强制重写 Host 头
+                String rewritten = headerStr.replaceAll("(?i)Host: [^\\r\\n]+", "Host: " + replaceHost);
+                out.write(rewritten.getBytes(StandardCharsets.US_ASCII), 0, rewritten.length());
+                // 请求头处理完，后续 body 透传
+                currentMode = Mode.PASSTHROUGH;
+                out.write(remainingBytes, 0, remainingBytes.length);
             } else {
-                if (isWebSocketUpgrade) {
-                    state = State.PASSTHROUGH;
-                } else if (chunked) {
-                    state = State.BODY_CHUNKED;
-                    chunkHeaderPending = true;
-                    chunkRemaining = 0;
-                } else if (contentLength >= 0) {
-                    state = State.BODY_FIXED;
-                    remainingBody = contentLength;
-                    if (remainingBody == 0) state = State.PASSTHROUGH;
+                // 响应方向：重写头里的 ws:// 地址
+                String rewrittenHeader = headerStr.replaceAll("ws://[^/\"\\s]+:\\d+", "ws://" + replaceWsUrl);
+                out.write(rewrittenHeader.getBytes(StandardCharsets.US_ASCII), 0, rewrittenHeader.length());
+
+                String lowerHeader = headerStr.toLowerCase();
+                boolean isWsUpgrade = lowerHeader.contains("upgrade: websocket") || lowerHeader.contains("101 switching protocols");
+
+                if (isWsUpgrade) {
+                    // WebSocket 握手响应，后续是二进制帧，直接透传
+                    currentMode = Mode.RESPONSE_WS;
+                    out.write(remainingBytes, 0, remainingBytes.length);
                 } else {
-                    state = State.BODY_EOF;
+                    // 普通 HTTP 响应(如 /json/version)，body 通常是 JSON 且在同一个包里
+                    // 对当前包剩余部分做替换，然后进入透传模式
+                    String remainingStr = new String(remainingBytes, StandardCharsets.US_ASCII);
+                    String rewrittenRemaining = remainingStr.replaceAll("ws://[^/\"\\s]+:\\d+", "ws://" + replaceWsUrl);
+                    out.write(rewrittenRemaining.getBytes(StandardCharsets.US_ASCII), 0, rewrittenRemaining.length());
+                    currentMode = Mode.PASSTHROUGH;
                 }
             }
-            return totalConsumed;
-        }
 
-        private int feedFixedBody(byte[] data, int offset, int len, ByteArrayOutputStream out) {
-            int available = len - offset;
-            int take = Math.min(available, remainingBody);
-            byte[] rewritten = rewriteHost(data, offset, take);
-            out.write(rewritten, 0, rewritten.length);
-            remainingBody -= take;
-            return take;
-        }
-
-        private int feedChunkedBody(byte[] data, int offset, int len, ByteArrayOutputStream out) {
-            int consumed = 0;
-            while (consumed < (len - offset)) {
-                int remaining = len - offset - consumed;
-                if (chunkHeaderPending) {
-                    // 读取 chunk 大小行：XXXX\r\n
-                    int eol = indexOf(data, offset + consumed, offset + consumed + remaining, (byte) '\n');
-                    if (eol < 0) {
-                        // 需要更多数据 - 简单起见透传并等待
-                        out.write(data, offset + consumed, remaining);
-                        consumed += remaining;
-                        break;
-                    }
-                    int lineLen = eol - (offset + consumed) + 1;
-                    String sizeLine = new String(data, offset + consumed, lineLen, StandardCharsets.US_ASCII).trim();
-                    int semi = sizeLine.indexOf(';');
-                    if (semi >= 0) sizeLine = sizeLine.substring(0, semi);
-                    try {
-                        chunkRemaining = Integer.parseInt(sizeLine.trim(), 16);
-                    } catch (NumberFormatException e) {
-                        chunkRemaining = 0;
-                    }
-                    // 透传 chunk 头
-                    out.write(data, offset + consumed, lineLen);
-                    consumed += lineLen;
-                    chunkHeaderPending = false;
-                    if (chunkRemaining == 0) {
-                        // 最后一个 chunk，后续 trailer 直到 \r\n\r\n，简单起见切到 PASSTHROUGH
-                        state = State.PASSTHROUGH;
-                        // 写入剩余
-                        out.write(data, offset + consumed, len - offset - consumed);
-                        consumed = len - offset;
-                        break;
-                    }
-                } else {
-                    int take = Math.min(remaining, chunkRemaining);
-                    byte[] rewritten = rewriteHost(data, offset + consumed, take);
-                    out.write(rewritten, 0, rewritten.length);
-                    consumed += take;
-                    chunkRemaining -= take;
-                    if (chunkRemaining == 0) {
-                        // 期望接下来是 \r\n，然后下一个 chunk 头
-                        // 读取 \r\n
-                        if (remaining - take >= 2 && data[offset + consumed] == '\r' && data[offset + consumed + 1] == '\n') {
-                            out.write(data, offset + consumed, 2);
-                            consumed += 2;
-                        }
-                        chunkHeaderPending = true;
-                    }
-                }
-            }
-            return consumed;
-        }
-
-        private byte[] rewriteHost(byte[] data, int offset, int len) {
-            // 简单粗暴：将 "ws://host:port/" 替换为 "ws://localhost:9222/"
-            // host 可能是 0.0.0.0、127.0.0.1、设备 IP 等
-            String s = new String(data, offset, len, StandardCharsets.US_ASCII);
-            String rewritten = s.replaceAll("ws://[^/\"]+:\\d+/", "ws://localhost:" + targetPort + "/");
-            return rewritten.getBytes(StandardCharsets.US_ASCII);
+            buffer.reset();
+            return out.toByteArray();
         }
 
         private static int indexOf(byte[] haystack, int from, int to, byte[] needle) {
@@ -400,13 +284,6 @@ public class DevToolsPortForwarder {
                     if (haystack[i + j] != needle[j]) continue outer;
                 }
                 return i;
-            }
-            return -1;
-        }
-
-        private static int indexOf(byte[] haystack, int from, int to, byte b) {
-            for (int i = from; i < to; i++) {
-                if (haystack[i] == b) return i;
             }
             return -1;
         }
@@ -448,13 +325,16 @@ public class DevToolsPortForwarder {
 
     public void stop() {
         isRunning.set(false);
-        try {
-            if (serverSocket != null && !serverSocket.isClosed()) {
-                serverSocket.close();
+        for (ServerSocket ss : serverSockets) {
+            try {
+                if (!ss.isClosed()) {
+                    ss.close();
+                }
+            } catch (IOException e) {
+                Log.e(TAG, "关闭服务异常", e);
             }
-        } catch (IOException e) {
-            Log.e(TAG, "关闭服务异常", e);
         }
+        serverSockets.clear();
         bridgePool.shutdownNow();
         acceptPool.shutdownNow();
     }
