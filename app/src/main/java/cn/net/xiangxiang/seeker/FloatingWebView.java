@@ -86,6 +86,7 @@ public class FloatingWebView extends FrameLayout {
     public void setOnCloseListener(OnCloseListener listener) {
         this.onCloseListener = listener;
     }
+    DevToolsPortForwarder devToolsPortForwarder;
 
     @SuppressLint({"SetJavaScriptEnabled", "ClickableViewAccessibility"})
     private void init(Context context) {
@@ -288,6 +289,11 @@ public class FloatingWebView extends FrameLayout {
         });
 
         setupTouchHandlers();
+        
+        // 启动 DevTools 端口转发服务，供 Termux Node.js 连接
+        if (devToolsPortForwarder == null)
+            devToolsPortForwarder = new DevToolsPortForwarder(context);
+        devToolsPortForwarder.start();
 
         // 初始位置与大小
         int defW = dpToPx(DEFAULT_WIDTH_DP);

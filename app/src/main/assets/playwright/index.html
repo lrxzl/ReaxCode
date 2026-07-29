@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Playwright WebView 测试工具</title>
+    <script src="./playwright-webview.js"></script>
+    <style>
+        body { font-family: sans-serif; background: #f0f0f0; padding: 20px; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        button { padding: 10px 15px; margin: 5px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 4px; }
+        button:hover { background: #0056b3; }
+        button.danger { background: #dc3545; }
+        button.danger:hover { background: #c82333; }
+        #log { background: #1e1e1e; color: #d4d4d4; padding: 15px; border-radius: 4px; height: 300px; overflow-y: auto; font-family: monospace; font-size: 14px; margin-top: 20px; }
+        .log-info { color: #d4d4d4; }
+        .log-success { color: #4CAF50; }
+        .log-error { color: #f44336; }
+        .log-warn { color: #FFC107; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h2>Playwright WebView 测试面板</h2>
+    <div>
+        <button onclick="testOpenPage()">1. 打开 Example.com</button>
+        <button onclick="testEvaluate()">2. 执行脚本获取标题</button>
+        <button onclick="testSearchBaidu()">3. 百度搜索测试</button>
+        <button onclick="testListPages()">4. 获取当前页面列表</button>
+        <button onclick="testEvalOnClient()">5. 在宿主执行脚本</button>
+        <br><br>
+        <button class="danger" onclick="testCloseAll()">关闭所有页面</button>
+    </div>
+
+    <div id="log"></div>
+</div>
+
+<script>
+    const pw = new Playwright();
+    let testPage = null;
+
+    // 日志工具
+    const logEl = document.getElementById('log');
+    function log(message, type = 'info') {
+        const time = new Date().toLocaleTimeString();
+        const div = document.createElement('div');
+        div.className = `log-${type}`;
+        // 格式化对象输出
+        if (typeof message === 'object') {
+            message = JSON.stringify(message, null, 2);
+        }
+        div.textContent = `[${time}] ${message}`;
+        logEl.appendChild(div);
+        logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    // 测试 1: 打开新页面
+    async function testOpenPage() {
+        try {
+            log('正在打开 example.com ...');
+            testPage = await pw.newPage('https://example.com', 'test_page_1');
+            log('页面打开成功，ID: ' + testPage.webViewId, 'success');
+        } catch (e) {
+            log('测试失败: ' + e.message, 'error');
+        }
+    }
+
+    // 测试 2: 执行脚本
+    async function testEvaluate() {
+        if (!testPage) return log('请先执行测试 1', 'warn');
+        try {
+            log('正在获取页面标题...');
+            const title = await testPage.title();
+            log('获取到的标题: ' + title, 'success');
+
+            log('正在通过函数获取 H1 文本...');
+            // 测试类似 Playwright 的函数传参执行
+            const h1Text = await testPage.evaluate(() => {
+                return document.querySelector('h1').innerText;
+            });
+            log('获取到的 H1: ' + h1Text, 'success');
+        } catch (e) {
+            log('测试失败: ' + e.message, 'error');
+        }
+    }
+
+    // 测试 3: 百度搜索 (测试 fill 和 click)
+    async function testSearchBaidu() {
+        try {
+            log('正在打开百度...');
+            const baiduPage = await pw.newPage('https://www.baidu.com', 'test_baidu');
+            log('百度页面打开成功，准备搜索...', 'success');
+
+            log('正在填写搜索词: "Playwright"...');
+            await baiduPage.fill('#kw', 'Playwright');
+
+            log('正在点击搜索按钮...');
+            // 百度的搜索按钮可能是 #su 或 input[type="submit"]
+            await baiduPage.click('#su');
+
+            log('等待搜索结果加载 (3秒)...');
+            await new Promise(r => setTimeout(r, 3000));
+
+            log('获取第一条搜索结果的标题...');
+            const firstResult = await baiduPage.evaluate(() => {
+                const item = document.querySelector('.result.c-container h3 a');
+                return item ? item.innerText : '未找到结果';
+            });
+
+            log('搜索结果第一条: ' + firstResult, 'success');
+
+            // 测试完毕关闭百度页面
+            await baiduPage.close();
+            log('已关闭百度页面');
+        } catch (e) {
+            log('百度测试失败: ' + e.message, 'error');
+        }
+    }
+
+    // 测试 4: 获取页面列表
+    async function testListPages() {
+        try {
+            log('正在获取宿主中的 WebView 列表...');
+            const pages = await pw.pages();
+            log(`当前共有 ${pages.length} 个页面:`, 'success');
+            for (const p of pages) {
+                const title = await p.title();
+                log(` - ID: ${p.webViewId}, Title: ${title}`);
+            }
+        } catch (e) {
+            log('测试失败: ' + e.message, 'error');
+        }
+    }
+
+    // 测试 5: 宿主环境执行
+    async function testEvalOnClient() {
+        try {
+            log('正在宿主(聊天界面)执行 JS: 1+1');
+            // 假设宿主环境能执行这段代码并返回
+            const result = await pw.evalOnClient('1+1');
+            log('宿主返回结果: ' + result, 'success');
+        } catch (e) {
+            log('测试失败: ' + e.message, 'error');
+        }
+    }
+
+    // 测试关闭所有
+    async function testCloseAll() {
+        try {
+            log('正在关闭所有 WebView...');
+            await pw.closeAllPages();
+            log('已全部关闭', 'success');
+            testPage = null;
+        } catch (e) {
+            log('测试失败: ' + e.message, 'error');
+        }
+    }
+</script>
+</body>
+</html>
