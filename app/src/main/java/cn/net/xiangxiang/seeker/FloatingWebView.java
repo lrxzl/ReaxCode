@@ -19,6 +19,8 @@ import android.view.ViewGroup;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.PermissionRequest;
+
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
@@ -34,6 +36,12 @@ import com.termux.shared.logger.Logger;
 import java.util.Random;
 
 public class FloatingWebView extends FrameLayout {
+
+    private String specId = "";
+
+    public void setSpecId(String specId) {
+        this.specId = specId == null ? "" : "["+specId+"]";
+    }
 
     public interface OnCloseListener {
         void onClosed(FloatingWebView webView);
@@ -155,10 +163,10 @@ public class FloatingWebView extends FrameLayout {
         settings.setBuiltInZoomControls(true);
         settings.setDisplayZoomControls(false);
         webView.setWebChromeClient(new WebChromeClient() {
-            @Override
 
+            @Override
             public void onReceivedTitle(WebView view, String title) {
-                titleText.setText(title);
+                titleText.setText(title + specId );
             }
 
             // ===== HTML5 权限请求处理 =====

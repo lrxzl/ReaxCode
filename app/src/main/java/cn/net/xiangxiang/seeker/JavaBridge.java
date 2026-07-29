@@ -392,6 +392,7 @@ public class JavaBridge {
                     floatingWebViewMap.put(newId, new WebViewEntry(floating, finalUrl));
                 }
                 idHolder[0] = newId;
+                floating.setSpecId(newId);
             } finally {
                 latch.countDown();
             }
@@ -403,6 +404,8 @@ public class JavaBridge {
             Thread.currentThread().interrupt();
             throw new RuntimeException("Interrupted while waiting for WebView creation", e);
         }
+
+
         return idHolder[0];
     }
 
