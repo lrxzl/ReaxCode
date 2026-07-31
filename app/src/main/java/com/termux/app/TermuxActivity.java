@@ -81,6 +81,7 @@ import java.util.Arrays;
 
 import android.app.AlertDialog;
 
+import cn.net.xiangxiang.seeker.DevToolsPortForwarder;
 import cn.net.xiangxiang.seeker.WebViewActivity;
 import cn.net.xiangxiang.seeker.JavaBridge;
 import cn.net.xiangxiang.seeker.PaymentSchemeHandler;
@@ -274,7 +275,6 @@ private WebView mHomeWebView;
             args.putString("url", "http://192.168.1.129:8084");
 //            args.putString("url", "file:///android_asset/playwright/index.html");
 //            args.putString("url", "https://seeker-vue.xiangxiang.net.cn");
-//            args.putString("url", "https://seeker-vue.xiangxiang.net.cn");
             mHomeWebViewFragment.setArguments(args);
             getSupportFragmentManager().beginTransaction()
                     .replace(R.id.home_webview_container, mHomeWebViewFragment, "home_webview")
@@ -425,6 +425,17 @@ private WebView mHomeWebView;
         mHomeWebViewTermuxManager.stopAudioRestartTimer();
         isActive = true;
         mIsOnResumeAfterOnCreate = false;
+
+        initCDP();
+    }
+
+    DevToolsPortForwarder devToolsPortForwarder;
+    private void initCDP() {
+        // 启动 DevTools 端口转发服务，供 Termux Node.js 连接
+        if (devToolsPortForwarder == null) {
+            devToolsPortForwarder = new DevToolsPortForwarder(this);
+            devToolsPortForwarder.start();
+        }
     }
 
     @Override

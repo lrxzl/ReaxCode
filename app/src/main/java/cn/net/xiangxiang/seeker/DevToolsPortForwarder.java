@@ -14,7 +14,6 @@ import java.io.OutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 public class DevToolsPortForwarder {
@@ -24,14 +23,14 @@ public class DevToolsPortForwarder {
 
     // 可能的 Socket 前缀
     private static final String SOCKET_PREFIX = "webview_devtools_remote";
-    private final Context acitivity;
+    private final Context activity;
 
     private ServerSocket serverSocket;
     private boolean isRunning = false;
     private Context context;
 
     public DevToolsPortForwarder(Context context) {
-        this.acitivity = context.getApplicationContext();
+        this.activity = context.getApplicationContext();
         this.context = context;
     }
 
@@ -41,22 +40,12 @@ public class DevToolsPortForwarder {
                 serverSocket = new ServerSocket(LOCAL_TCP_PORT);
                 isRunning = true;
                 Log.i(TAG, "TCP 代理服务已启动，监听端口: " + LOCAL_TCP_PORT);
-                ((Activity) this.context).runOnUiThread(() -> {
-                    Toast.makeText(this.context, "TCP 代理服务已启动，监听端口: " + LOCAL_TCP_PORT, Toast.LENGTH_LONG).show();
-                });
 
                 while (isRunning) {
                     Socket tcpClient = serverSocket.accept();
-                    Log.i(TAG, "Termux 已连接，准备桥接...");
-                    ((Activity) this.context).runOnUiThread(() -> {
-                        Toast.makeText(this.context, "Termux 已连接，准备桥接...", Toast.LENGTH_LONG).show();
-                    });
                     // 获取所有可能的 Socket 名称
                     List<String> possibleSocketNames = getPossibleSocketNames();
                     LocalSocket localSocket = null;
-                    ((Activity) this.context).runOnUiThread(() -> {
-                        Toast.makeText(this.context, "names" + Arrays.toString(possibleSocketNames.toArray()), Toast.LENGTH_LONG).show();
-                    });
                     // 依次尝试连接
                     for (String socketName : possibleSocketNames) {
                         try {
@@ -65,7 +54,7 @@ public class DevToolsPortForwarder {
                             Log.i(TAG, "成功连接到 WebView Socket: " + socketName);
 
                             ((Activity) this.context).runOnUiThread(() -> {
-                                Toast.makeText(this.context, "成功连接到 WebView Socket: " + socketName, Toast.LENGTH_LONG).show();
+                                Toast.makeText(this.context, "CDP success" + socketName, Toast.LENGTH_LONG).show();
                             });
                             break; // 连接成功，跳出循环
                         } catch (IOException e) {
@@ -149,8 +138,16 @@ public class DevToolsPortForwarder {
         int bytesRead;
         try {
             while ((bytesRead = in.read(buffer)) != -1) {
+                // 1. 原有的字节传输
                 out.write(buffer, 0, bytesRead);
                 out.flush();
+                // 2. 新增：将本次读取的字节转换为 UTF-8 字符串并输出
+                // 注意：如果传输的是二进制数据（如图片），转为字符串可能产生乱码，建议仅用于文本传输场景
+                String chunk = new String(buffer, 0, bytesRead, java.nio.charset.StandardCharsets.UTF_8);
+                // 为避免日志过长，只输出前 200 个字符，并追加长度信息
+                int maxLogLen = 1000;
+                String logContent = chunk.length() > maxLogLen ? chunk.substring(0, maxLogLen) + "..." : chunk;
+                Log.d(TAG, "传输数据块 (长度=" + bytesRead + "): " + logContent);
             }
         } catch (IOException e) {
             Log.d(TAG, "连接已断开");
