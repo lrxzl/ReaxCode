@@ -1,5 +1,7 @@
 package cn.net.xiangxiang.seeker;
 
+import static cn.net.xiangxiang.seeker.WebViewConstants.CONSOLE_CAPTURE_JS;
+
 import android.app.Activity;
 import android.content.Intent;
 import android.database.Cursor;
@@ -308,6 +310,50 @@ public class JavaBridge {
                 return result;
             }
 
+            // >>> 新增：获取指定 WebView 的控制台日志
+            case "getConsoleLogs": {
+                String webViewId = args.get(0).asText();
+                FloatingWebView webView;
+                synchronized (floatingWebViewMap) {
+                    WebViewEntry entry = floatingWebViewMap.get(webViewId);
+                    if (entry == null) {
+                        throw new IllegalArgumentException("WebView with id " + webViewId + " not found");
+                    }
+                    webView = entry.floatingWebView;
+                }
+                String rawResult = evaluateJavascriptSync(webView,
+                    "window.__getConsoleLogs ? window.__getConsoleLogs() : []");
+                if (rawResult != null && !"null".equals(rawResult)) {
+                    try {
+                        return mapper.readTree(rawResult);
+                    } catch (Exception e) {
+                        log.warning("[getConsoleLogs] Failed to parse logs: " + e.getMessage());
+                        return mapper.createArrayNode();
+                    }
+                }
+                return mapper.createArrayNode();
+            }
+            // <<< 新增结束
+
+            // >>> 新增：清除指定 WebView 的控制台日志
+            case "clearConsoleLogs": {
+                String webViewId = args.get(0).asText();
+                FloatingWebView webView;
+                synchronized (floatingWebViewMap) {
+                    WebViewEntry entry = floatingWebViewMap.get(webViewId);
+                    if (entry == null) {
+                        throw new IllegalArgumentException("WebView with id " + webViewId + " not found");
+                    }
+                    webView = entry.floatingWebView;
+                }
+                evaluateJavascriptSync(webView,
+                    "window.__clearConsoleLogs ? window.__clearConsoleLogs() : void(0)");
+                Map<String, Object> result = new HashMap<>();
+                result.put("cleared", true);
+                return result;
+            }
+            // <<< 新增结束
+
             case "openFileChooser": {
                 String acceptType = optNullableText(args, 0);
                 return openFileChooserInternal(acceptType);
@@ -327,8 +373,35 @@ public class JavaBridge {
      * 3. 创建新的浮动 WebView 并返回 id
      */
     public String openOrGetWebViewByUrl(String url, String specifiedId) throws Exception {
+        // >>> 改动：如果 specifiedId 已存在，复用原 WebView 并加载新 URL
+        if (specifiedId != null) {
+            WebViewEntry existingEntry;
+            synchronized (floatingWebViewMap) {
+                existingEntry = floatingWebViewMap.get(specifiedId);
+            }
+            if (existingEntry != null) {
+                final String finalUrl = url;
+                final CountDownLatch latch = new CountDownLatch(1);
+                activity.runOnUiThread(() -> {
+                    try {
+                        existingEntry.floatingWebView.getWebView().loadUrl(finalUrl);
+                    } finally {
+                        latch.countDown();
+                    }
+                });
+                latch.await(5, TimeUnit.SECONDS);
+                // url 是 final 字段，用新 entry 替换
+                synchronized (floatingWebViewMap) {
+                    floatingWebViewMap.put(specifiedId, new WebViewEntry(existingEntry.floatingWebView, finalUrl));
+                }
+                log.info("[openOrGetWebViewByUrl] Reused WebView: id=" + specifiedId + ", url=" + url);
+                return specifiedId;
+            }
+        }
+        // <<< 改动结束
+
+        // 超过上限则关闭最老的
         synchronized (floatingWebViewMap) {
-            // 2. 超过上限则关闭最老的 — LinkedHashMap 第一个 entry 就是最老的
             while (floatingWebViewMap.size() >= JavaBridgeConstants.MAX_WEB_VIEW_COUNT) {
                 String oldestId = floatingWebViewMap.keySet().iterator().next();
                 log.info("[openOrGetWebViewByUrl] Max count reached, closing oldest: id=" + oldestId);
@@ -336,7 +409,7 @@ public class JavaBridge {
             }
         }
 
-        // 3. 创建新的浮动 WebView
+        // 创建新的浮动 WebView
         String newId = openFloatingWebView(url, specifiedId);
         log.info("[openOrGetWebViewByUrl] Created new WebView: id=" + newId + ", url=" + url);
         return newId;
@@ -376,6 +449,9 @@ public class JavaBridge {
                     @Override
                     public void onPageFinished(WebView view, String url) {
                         view.evaluateJavascript(JavaBridgeConstants.BRIDGE_JS, null);
+                        // >>> 新增：每次页面加载完成后注入控制台捕获脚本
+                        view.evaluateJavascript(CONSOLE_CAPTURE_JS, null);
+                        // <<< 新增结束
                     }
                 });
                 floating.loadUrl(finalUrl);

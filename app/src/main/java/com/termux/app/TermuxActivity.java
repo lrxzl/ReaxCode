@@ -258,8 +258,6 @@ private WebView mHomeWebView;
 
         setContentView(R.layout.activity_termux);
 
-        // 开启 WebView 调试模式，允许通过 CDP 协议连接
-        WebView.setWebContentsDebuggingEnabled(true);
 // ===== 鍒濆鍖?HomeWebView -> 鏀圭敤 Fragment =====
         mHomeWebViewTermuxManager = TermuxManager.getInstance();
         mHomeWebViewTermuxManager.init(this);
@@ -431,6 +429,10 @@ private WebView mHomeWebView;
 
     DevToolsPortForwarder devToolsPortForwarder;
     private void initCDP() {
+
+        // 开启 WebView 调试模式，允许通过 CDP 协议连接
+        WebView.setWebContentsDebuggingEnabled(true);
+
         // 启动 DevTools 端口转发服务，供 Termux Node.js 连接
         if (devToolsPortForwarder == null) {
             devToolsPortForwarder = new DevToolsPortForwarder(this);
