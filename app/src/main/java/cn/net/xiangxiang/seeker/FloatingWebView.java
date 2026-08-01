@@ -11,6 +11,7 @@ import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Handler;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.MotionEvent;
@@ -60,7 +61,7 @@ public class FloatingWebView extends FrameLayout {
 
     private LinearLayout titleBar;
     private TextView titleText;
-    private TextView btnMinimize, btnZoomIn, btnZoomOut, btnFullscreen, btnClose, btnSearch;
+    private TextView btnMinimize, btnZoomIn, btnZoomOut, btnFullscreen, btnClose, btnSearch, btnRefresh;
     private WebView webView;
     private ImageView resizeHandle;
 
@@ -77,6 +78,27 @@ public class FloatingWebView extends FrameLayout {
 
     private long lastTitleClickTime = 0;
     private static final long DOUBLE_CLICK_INTERVAL = 300;
+
+    // ===== 透明度管理 =====
+    private static FloatingWebView sActiveWindow = null;
+    private static final float ACTIVE_ALPHA = 0.92f;
+    private static final float IDLE_ALPHA = 0.7f;
+    private static final float INACTIVE_ALPHA = 0.5f;
+    private static final long IDLE_TIMEOUT_MS = 10_000L;
+    private final Handler idleHandler = new Handler();
+    private final Runnable idleRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (sActiveWindow == FloatingWebView.this) {
+                setAlpha(IDLE_ALPHA);
+            }
+        }
+    };
+
+    // ===== URL 历史记录 =====
+    private static final String PREF_NAME = "floating_webview_history";
+    private static final String KEY_HISTORY = "url_history";
+    private static final int MAX_HISTORY = 50;
 
     public FloatingWebView(Context context) {
         super(context);
@@ -143,8 +165,16 @@ public class FloatingWebView extends FrameLayout {
             }
             showAddressDialog();
         });
-        titleBar.addView(btnSearch);
 
+        // 刷新按钮
+        btnRefresh = createIconButton(context, R.drawable.ic_refresh, v -> {
+            if (webView != null) {
+                webView.reload();
+            }
+        });
+
+        titleBar.addView(btnSearch);
+        titleBar.addView(btnRefresh);
         titleBar.addView(btnMinimize);
 //        titleBar.addView(btnZoomOut);
 //        titleBar.addView(btnZoomIn);
@@ -193,7 +223,7 @@ public class FloatingWebView extends FrameLayout {
 
                 Intent intent;
                 if (fileChooserParams != null && fileChooserParams.getAcceptTypes() != null
-                        && fileChooserParams.getAcceptTypes().length > 0) {
+                    && fileChooserParams.getAcceptTypes().length > 0) {
                     intent = new Intent(Intent.ACTION_GET_CONTENT);
                     intent.addCategory(Intent.CATEGORY_OPENABLE);
                     String[] acceptTypes = fileChooserParams.getAcceptTypes();
@@ -235,7 +265,7 @@ public class FloatingWebView extends FrameLayout {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, String url) {
                 if (PaymentSchemeHandler.handlePaymentUrl(
-                        (Activity) context, view, url)) {
+                    (Activity) context, view, url)) {
                     return true;
                 }
                 return super.shouldOverrideUrlLoading(view, url);
@@ -246,7 +276,7 @@ public class FloatingWebView extends FrameLayout {
                 if (request != null && request.getUrl() != null) {
                     String url = request.getUrl().toString();
                     if (PaymentSchemeHandler.handlePaymentUrl(
-                            (Activity) context, view, url)) {
+                        (Activity) context, view, url)) {
                         return true;
                     }
                 }
@@ -307,6 +337,36 @@ public class FloatingWebView extends FrameLayout {
         int offsetY = (random.nextInt(51) + 50) * (random.nextBoolean() ? 1 : -1);
         setSizeAndPosition(defW, defH, centerX + offsetX, centerY + offsetY);
         saveNormalState();
+
+        // 初始激活窗口
+        activateWindow();
+    }
+
+    // ---------- 透明度管理 ----------
+
+    private void activateWindow() {
+        // 取消前一个激活窗口的激活状态
+        if (sActiveWindow != null && sActiveWindow != this) {
+            sActiveWindow.setAlpha(INACTIVE_ALPHA);
+            sActiveWindow.idleHandler.removeCallbacks(sActiveWindow.idleRunnable);
+        }
+        sActiveWindow = this;
+        setAlpha(ACTIVE_ALPHA);
+        idleHandler.removeCallbacks(idleRunnable);
+        idleHandler.postDelayed(idleRunnable, IDLE_TIMEOUT_MS);
+    }
+
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent ev) {
+        int action = ev.getAction();
+        if (action == MotionEvent.ACTION_DOWN) {
+            activateWindow();
+        } else if (action == MotionEvent.ACTION_MOVE && sActiveWindow == this) {
+            // 连续交互时重置空闲计时器
+            idleHandler.removeCallbacks(idleRunnable);
+            idleHandler.postDelayed(idleRunnable, IDLE_TIMEOUT_MS);
+        }
+        return super.dispatchTouchEvent(ev);
     }
 
     // ---------- 窗口控制 ----------
@@ -354,21 +414,122 @@ public class FloatingWebView extends FrameLayout {
         return null;
     }
 
-    // ---------- 新增地址栏对话框方法 ----------
+    // ---------- URL 历史记录 ----------
+
+    private void saveUrlToHistory(String url) {
+        if (url == null || url.isEmpty()) return;
+        android.content.SharedPreferences prefs = getContext().getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
+        java.util.List<String> list = new java.util.ArrayList<>();
+        String json = prefs.getString(KEY_HISTORY, "");
+        if (!json.isEmpty()) {
+            try {
+                org.json.JSONArray arr = new org.json.JSONArray(json);
+                for (int i = 0; i < arr.length(); i++) {
+                    list.add(arr.getString(i));
+                }
+            } catch (Exception e) {
+                // ignore
+            }
+        }
+        list.remove(url);
+        list.add(0, url);
+        while (list.size() > MAX_HISTORY) {
+            list.remove(list.size() - 1);
+        }
+        org.json.JSONArray arr = new org.json.JSONArray(list);
+        prefs.edit().putString(KEY_HISTORY, arr.toString()).apply();
+    }
+
+    private java.util.List<String> getHistoryUrls() {
+        java.util.List<String> list = new java.util.ArrayList<>();
+        android.content.SharedPreferences prefs = getContext().getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
+        String json = prefs.getString(KEY_HISTORY, "");
+        if (!json.isEmpty()) {
+            try {
+                org.json.JSONArray arr = new org.json.JSONArray(json);
+                for (int i = 0; i < arr.length(); i++) {
+                    list.add(arr.getString(i));
+                }
+            } catch (Exception e) {
+                // ignore
+            }
+        }
+        return list;
+    }
+
+    // ---------- 地址栏对话框（带历史记录自动补全）----------
+
     private void showAddressDialog() {
         // 获取当前 WebView 的 URL 作为默认值
         String currentUrl = webView.getUrl();
         if (currentUrl == null) currentUrl = "";
 
-        // 使用 AlertDialog + EditText
+        // 使用 AlertDialog + EditText + ListView（历史记录下拉提示）
         android.widget.EditText input = new android.widget.EditText(getContext());
-        input.setText(currentUrl);
         input.setHint("https://");
         input.setSelectAllOnFocus(true);
 
+        // 获取历史记录
+        final java.util.List<String> historyUrls = getHistoryUrls();
+
+        // 创建适配器（使用可变的 ArrayList 副本）
+        final android.widget.ArrayAdapter<String> adapter = new android.widget.ArrayAdapter<>(
+            getContext(), android.R.layout.simple_list_item_1, new java.util.ArrayList<>(historyUrls));
+
+        // 对话框内容布局
+        LinearLayout dialogContent = new LinearLayout(getContext());
+        dialogContent.setOrientation(LinearLayout.VERTICAL);
+
+        dialogContent.addView(input, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        final android.widget.ListView listView = new android.widget.ListView(getContext());
+        listView.setAdapter(adapter);
+
+        // 仅当有历史记录时才显示列表
+        if (!historyUrls.isEmpty()) {
+            LinearLayout.LayoutParams listParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dpToPx(200));
+            dialogContent.addView(listView, listParams);
+        }
+
+        // 输入文本变化时筛选列表
+        input.addTextChangedListener(new android.text.TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+                String query = s.toString().toLowerCase().trim();
+                adapter.clear();
+                for (String url : historyUrls) {
+                    if (url.toLowerCase().contains(query)) {
+                        adapter.add(url);
+                    }
+                }
+                adapter.notifyDataSetChanged();
+            }
+
+            @Override
+            public void afterTextChanged(android.text.Editable s) {}
+        });
+
+        // 点击历史记录项时填充输入框
+        listView.setOnItemClickListener((parent, view, position, id) -> {
+            String selectedUrl = adapter.getItem(position);
+            if (selectedUrl != null) {
+                input.setText(selectedUrl);
+                input.setSelection(selectedUrl.length());
+            }
+        });
+
+        // 设置初始文本（会触发 TextWatcher 进行筛选）
+        input.setText(currentUrl);
+        input.setSelection(currentUrl.length());
+
         new android.app.AlertDialog.Builder(getContext())
             .setTitle("输入网址")
-            .setView(input)
+            .setView(dialogContent)
             .setPositiveButton("加载", (dialog, which) -> {
                 String url = input.getText().toString().trim();
                 if (url.isEmpty()) return;
@@ -460,6 +621,12 @@ public class FloatingWebView extends FrameLayout {
     }
 
     private void close() {
+        // 清理透明度管理
+        idleHandler.removeCallbacks(idleRunnable);
+        if (sActiveWindow == this) {
+            sActiveWindow = null;
+        }
+
         if (onCloseListener != null) {
             onCloseListener.onClosed(this);
         }
@@ -471,6 +638,7 @@ public class FloatingWebView extends FrameLayout {
     }
 
     public void loadUrl(String url) {
+        saveUrlToHistory(url);
         webView.loadUrl(url);
     }
 
@@ -648,6 +816,10 @@ public class FloatingWebView extends FrameLayout {
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
+        idleHandler.removeCallbacks(idleRunnable);
+        if (sActiveWindow == this) {
+            sActiveWindow = null;
+        }
         webView.destroy();
     }
 }
