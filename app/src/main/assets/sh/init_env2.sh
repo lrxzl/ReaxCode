@@ -482,34 +482,34 @@ main() {
     setup_npm_mirror
 
     # 2. 项目不存在 → 首次安装
-#    if [ ! -d "$PROJECT_DIR" ]; then
-#        first_install
-#    else
-#        echo "[信息] 项目目录已存在"
-#        # 若存在静态前端目录，则不需要检查 web/dist/index.html
-#        if has_static_html; then
-#            echo "[信息] 检测到 server/html/ 目录，将跳过前端依赖检查"
-#            if ! verify_deps; then
-#                install_deps
-#            fi
-#        else
-#            if ! verify_deps || [ ! -f "$PROJECT_DIR/web/dist/index.html" ]; then
-#                install_deps
-#            fi
-#        fi
-#    fi
+    if [ ! -d "$PROJECT_DIR" ]; then
+        first_install
+    else
+        echo "[信息] 项目目录已存在"
+        # 若存在静态前端目录，则不需要检查 web/dist/index.html
+        if has_static_html; then
+            echo "[信息] 检测到 server/html/ 目录，将跳过前端依赖检查"
+            if ! verify_deps; then
+                install_deps
+            fi
+        else
+            if ! verify_deps || [ ! -f "$PROJECT_DIR/web/dist/index.html" ]; then
+                install_deps
+            fi
+        fi
+    fi
 
     # 3. 启动前再次确认依赖可用（双保险）
-#    if ! verify_deps; then
-#        echo "[错误] 依赖安装后仍不可用，请手动检查"
-#        exit 1
-#    fi
+    if ! verify_deps; then
+        echo "[错误] 依赖安装后仍不可用，请手动检查"
+        exit 1
+    fi
 
     # 4. 启动服务
     start_service
 
     # 5. 后台静默更新代码（下次生效）
-#    background_update
+    background_update
 
     # 6. 启动端口监听守护进程
     monitor_process
