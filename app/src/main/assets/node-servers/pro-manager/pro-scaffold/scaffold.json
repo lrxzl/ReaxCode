@@ -1,0 +1,14 @@
+[
+  {
+    "name": "Vue3 + Express + SQLite",
+    "templateDir": "fullstack-vue3-express",
+    "language": { "frontend": "vue3", "server": "nodejs" },
+    "description": "全栈手脚架：Vue 3 + Vite 前端，Express.js 后端 + SQLite 数据库"
+  },
+  {
+    "name": "Vue3 纯前端",
+    "templateDir": "frontend-only-vue3",
+    "language": { "frontend": "vue3" },
+    "description": "纯前端手脚架：Vue 3 + Vite，无后端"
+  }
+]

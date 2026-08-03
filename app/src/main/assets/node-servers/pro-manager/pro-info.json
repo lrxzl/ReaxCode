@@ -1,0 +1,10 @@
+{
+  "status": "running",
+  "pid": 14456,
+  "ports": [],
+  "links": [
+    "http://localhost:3457",
+    "http://localhost:5173"
+  ],
+  "port": 0
+}

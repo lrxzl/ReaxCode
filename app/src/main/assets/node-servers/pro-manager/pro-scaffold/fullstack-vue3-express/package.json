@@ -1,0 +1,16 @@
+{
+  "name": "{{PROJECT_NAME}}",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "install": "cd frontend && npm install && cd ../server && npm install",
+    "dev": "node node_modules/.bin/concurrently -n front,back -c green,blue \"cd frontend && npm run dev\" \"cd server && npm run dev\"",
+    "dev:front": "cd frontend && npm run dev",
+    "dev:back": "cd server && npm run dev",
+    "build": "cd frontend && npm run build",
+    "start": "cd server && node index.js"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
