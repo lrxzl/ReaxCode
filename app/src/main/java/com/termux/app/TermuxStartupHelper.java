@@ -20,7 +20,7 @@ public class TermuxStartupHelper {
     private static final String TERMUX_HOME = "/data/data/com.termux/files/home";
 
     /** 修改此版本号会强制重新释放 node-servers 资源 */
-    private static final int ASSETS_VERSION = 2; // [修正] 版本号+1，强制重新释放
+    private static final int ASSETS_VERSION = 3;
 
     public static void start(Context context) {
         new Thread(() -> {
@@ -65,29 +65,25 @@ public class TermuxStartupHelper {
 
                 // ---------- 4. 同步执行 init_env.sh ----------
                 File initEnv = new File(shDir, "init_env.sh");
-                TermuxManager.CommandResult initResult =
-                    termuxManager.executeCommandSync("bash " + initEnv.getAbsolutePath());
-                Logger.logInfo(LOG_TAG,
-                    "init_env.sh exitCode=" + initResult.exitCode
-                        + " stderr=" + initResult.stderr);
+                TermuxManager.CommandResult initResult = termuxManager.executeCommandSync("bash " + initEnv.getAbsolutePath());
+                Logger.logInfo(LOG_TAG, "init_env.sh exitCode=" + initResult.exitCode + " stderr=" + initResult.stderr);
 
                 // ---------- 5. 后台启动 node-tools ----------
-                File nodeToolsStartup =
-                    new File(homeDir, "node-servers/node-tools/startup.sh");
-                termuxManager.executeCommandSync(
-                    "bash " + nodeToolsStartup.getAbsolutePath()
-                        + " < /dev/null > " + new File(homeDir, "node-tools-startup.log").getAbsolutePath()
-                        + " 2>&1 &");
+                File nodeToolsStartup = new File(homeDir, "node-servers/node-tools/startup.sh");
+                termuxManager.executeCommandSync("bash " + nodeToolsStartup.getAbsolutePath() + " < /dev/null > "
+                        + new File(homeDir, "node-tools-startup.log").getAbsolutePath() + " 2>&1 &");
 
                 // ---------- 6. 后台启动 pro-manager ----------
-                File proManagerStartup =
-                    new File(homeDir, "node-servers/pro-manager/startup.sh");
-                termuxManager.executeCommandSync(
-                    "bash " + proManagerStartup.getAbsolutePath()
-                        + " < /dev/null > " + new File(homeDir, "pro-manager-startup.log").getAbsolutePath()
-                        + " 2>&1 &");
+                File proManagerStartup = new File(homeDir, "node-servers/pro-manager/server/startup.sh");
+                termuxManager.executeCommandSync("bash " + proManagerStartup.getAbsolutePath() + " < /dev/null > "
+                    + new File(homeDir, "pro-manager-startup.log").getAbsolutePath() + " 2>&1 &");
 
                 Logger.logInfo(LOG_TAG, "Termux 启动流程已派发完毕");
+
+                // ---------- 7. 更新 pro-manager ----------
+//                File updateProManager = new File(homeDir, "sh/update.sh");
+//                termuxManager.executeCommandSync("bash " + updateProManager.getAbsolutePath() + " < /dev/null > "
+//                    + new File(homeDir, "pro-manager-update.log").getAbsolutePath() + " 2>&1 &");
 
             } catch (Exception e) {
                 Logger.logStackTraceWithMessage(LOG_TAG, "Termux 启动初始化异常", e);

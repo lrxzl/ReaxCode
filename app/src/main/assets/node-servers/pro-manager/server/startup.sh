@@ -5,7 +5,7 @@
 #   - 检查依赖（node_modules 存在 + express 可加载），缺失则安装
 #   - 启动 node index.js（兼容 server/index.js）
 # ============================================
-
+echo "ready"
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
