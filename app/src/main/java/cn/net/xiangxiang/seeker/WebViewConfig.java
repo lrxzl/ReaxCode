@@ -1,4 +1,4 @@
-package cn.net.xiangxiang.reaction.frontend;
+package cn.net.xiangxiang.seeker;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;

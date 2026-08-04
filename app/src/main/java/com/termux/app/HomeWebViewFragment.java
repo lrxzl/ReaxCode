@@ -6,13 +6,12 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
-import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 import cn.net.xiangxiang.seeker.JavaBridgeConstants;
-import cn.net.xiangxiang.reaction.frontend.WebViewConfig;
+import cn.net.xiangxiang.seeker.WebViewConfig;
 
 public class HomeWebViewFragment extends Fragment {
 

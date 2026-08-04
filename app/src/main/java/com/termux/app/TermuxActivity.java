@@ -19,8 +19,6 @@ import android.view.Gravity;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
-import android.webkit.JavascriptInterface;
-import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebResourceRequest;
@@ -82,14 +80,13 @@ import java.util.Arrays;
 import android.app.AlertDialog;
 
 import cn.net.xiangxiang.seeker.DevToolsPortForwarder;
-import cn.net.xiangxiang.seeker.WebViewActivity;
 import cn.net.xiangxiang.seeker.JavaBridge;
 import cn.net.xiangxiang.seeker.PaymentSchemeHandler;
 import cn.net.xiangxiang.seeker.FloatingToggleButton;
 import cn.net.xiangxiang.seeker.FloatingWebView;
 import cn.net.xiangxiang.seeker.TermuxManager;
-import cn.net.xiangxiang.reaction.frontend.tools.FrontendJavaTools;
-import cn.net.xiangxiang.reaction.frontend.WebViewConfig;
+import cn.net.xiangxiang.seeker.tools.FrontendJavaTools;
+import cn.net.xiangxiang.seeker.WebViewConfig;
 
 /**
  * A terminal emulator activity.

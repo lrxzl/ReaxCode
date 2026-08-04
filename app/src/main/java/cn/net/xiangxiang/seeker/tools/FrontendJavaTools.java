@@ -1,4 +1,4 @@
-package cn.net.xiangxiang.reaction.frontend.tools;
+package cn.net.xiangxiang.seeker.tools;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -6,8 +6,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.logging.Logger;
 
-import cn.net.xiangxiang.reaction.frontend.tools.file.FileContentOperator;
-import cn.net.xiangxiang.reaction.frontend.tools.file.IFileContentOperator;
+import cn.net.xiangxiang.seeker.tools.file.FileContentOperator;
+import cn.net.xiangxiang.seeker.tools.file.IFileContentOperator;
 import cn.net.xiangxiang.seeker.TermuxManager;
 
 public class FrontendJavaTools {

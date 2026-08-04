@@ -1,4 +1,4 @@
-package cn.net.xiangxiang.reaction.frontend.tools.file;
+package cn.net.xiangxiang.seeker.tools.file;
 
 import android.os.Build;
 

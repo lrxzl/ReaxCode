@@ -35,11 +35,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Logger;
 
-import cn.net.xiangxiang.reaction.frontend.tools.FrontendJavaTools;
-import cn.net.xiangxiang.reaction.frontend.tools.file.IFileContentOperator;
+import cn.net.xiangxiang.seeker.tools.FrontendJavaTools;
+import cn.net.xiangxiang.seeker.tools.file.IFileContentOperator;
 
 public class JavaBridge {
     private static final Logger log = Logger.getLogger(JavaBridge.class.getName());

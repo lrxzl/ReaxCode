@@ -1,4 +1,4 @@
-package cn.net.xiangxiang.reaction.frontend.tools.file;
+package cn.net.xiangxiang.seeker.tools.file;
 
 import java.io.BufferedReader;
 import java.io.File;

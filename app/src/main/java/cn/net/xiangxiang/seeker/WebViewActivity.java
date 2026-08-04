@@ -3,21 +3,17 @@ package cn.net.xiangxiang.seeker;
 import android.annotation.SuppressLint;
 import android.content.Intent;
 import android.os.Bundle;
-import android.view.View;
-import android.webkit.JavascriptInterface;
-import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
-import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.termux.shared.logger.Logger;
 
-import cn.net.xiangxiang.reaction.frontend.tools.FrontendJavaTools;
-import cn.net.xiangxiang.reaction.frontend.WebViewConfig;
+import cn.net.xiangxiang.seeker.tools.FrontendJavaTools;
+
 import android.webkit.WebResourceRequest;
 
 
