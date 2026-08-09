@@ -81,9 +81,9 @@ public class FloatingWebView extends FrameLayout {
 
     // ===== 透明度管理 =====
     private static FloatingWebView sActiveWindow = null;
-    private static final float ACTIVE_ALPHA = 0.92f;
-    private static final float IDLE_ALPHA = 0.7f;
-    private static final float INACTIVE_ALPHA = 0.5f;
+    private static final float ACTIVE_ALPHA = 1.0f;
+    private static final float IDLE_ALPHA = 1.0f;
+    private static final float INACTIVE_ALPHA = 0.9f;
     private static final long IDLE_TIMEOUT_MS = 10_000L;
     private final Handler idleHandler = new Handler();
     private final Runnable idleRunnable = new Runnable() {

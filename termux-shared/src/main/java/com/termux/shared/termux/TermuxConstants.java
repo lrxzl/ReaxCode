@@ -347,7 +347,7 @@ public final class TermuxConstants {
      */
 
     /** Termux app name */
-public static final String TERMUX_APP_NAME = "OpenSeeker";
+    public static final String TERMUX_APP_NAME = "ReaxCode";
     /** Termux package name */
     public static final String TERMUX_PACKAGE_NAME = "com.termux"; // Default: "com.termux"
     /** Termux GitHub repo name */
