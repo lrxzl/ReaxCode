@@ -26,10 +26,18 @@ import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 import android.view.ViewGroup;
 import android.view.ViewParent;
+import android.os.Handler;
+import android.os.Looper;
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
+import java.io.IOException;
 
 import android.view.WindowManager;
 import android.widget.EditText;
 import android.widget.ImageButton;
+import android.widget.TextView;
 import android.widget.ListView;
 import android.widget.RelativeLayout;
 import android.widget.Toast;
@@ -106,6 +114,36 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * {@link #onServiceConnected(ComponentName, IBinder)}.
      */
     TermuxService mTermuxService;
+
+    /** 启动进度对话框 */
+    private AlertDialog mStartupProgressDialog;
+    /** 启动日志轮询 Handler */
+    private final Handler mStartupLogHandler = new Handler(Looper.getMainLooper());
+    /** 启动日志轮询任务 */
+    private final Runnable mStartupLogPoller = new Runnable() {
+        @Override
+        public void run() {
+            pollStartupLogs();
+            mStartupLogHandler.postDelayed(this, 500);
+        }
+    };
+    /** 启动状态监听器 */
+    private final TermuxStartupHelper.OnStartupListener mStartupListener = new TermuxStartupHelper.OnStartupListener() {
+        @Override
+        public void onStartupStart() {
+            runOnUiThread(() -> showStartupProgressDialog());
+        }
+
+        @Override
+        public void onStartupComplete() {
+            runOnUiThread(() -> dismissStartupProgressDialog());
+        }
+
+        @Override
+        public void onStartupProgress(String message) {
+            runOnUiThread(() -> updateStartupProgressText(message));
+        }
+    };
 
     /**
      * The {@link TerminalView} shown in  {@link TermuxActivity} that displays the terminal.
@@ -255,6 +293,13 @@ private WebView mHomeWebView;
 
         setContentView(R.layout.activity_termux);
 
+        // 注册启动状态监听器，显示/隐藏初始化旋转等待
+        TermuxStartupHelper.addStartupListener(mStartupListener);
+        // 若启动流程已在进行，立即显示进度对话框（避免监听器注册晚于通知）
+        if (TermuxStartupHelper.isStartupRunning()) {
+            showStartupProgressDialog();
+        }
+
 // ===== 鍒濆鍖?HomeWebView -> 鏀圭敤 Fragment =====
         mHomeWebViewTermuxManager = TermuxManager.getInstance();
         mHomeWebViewTermuxManager.init(this);
@@ -267,9 +312,9 @@ private WebView mHomeWebView;
         if (mHomeWebViewFragment == null) {
             mHomeWebViewFragment = new HomeWebViewFragment();
             Bundle args = new Bundle();
-//            args.putString("url", "http://192.168.1.129:8084");
+            args.putString("url", "http://192.168.1.129:8084");
 //            args.putString("url", "file:///android_asset/playwright/index.html");
-            args.putString("url", "https://seeker-vue.xiangxiang.net.cn");
+//            args.putString("url", "https://seeker-vue.xiangxiang.net.cn");
             mHomeWebViewFragment.setArguments(args);
             getSupportFragmentManager().beginTransaction()
                     .replace(R.id.home_webview_container, mHomeWebViewFragment, "home_webview")
@@ -370,6 +415,84 @@ private WebView mHomeWebView;
         // Send the {@link TermuxConstants#BROADCAST_TERMUX_OPENED} broadcast to notify apps that Termux
         // app has been opened.
         TermuxUtils.sendTermuxOpenedBroadcast(this);
+    }
+
+    /** 显示启动初始化旋转等待对话框 */
+    private void showStartupProgressDialog() {
+        if (mStartupProgressDialog == null) {
+            mStartupProgressDialog = new AlertDialog.Builder(this)
+                    .setView(R.layout.dialog_reax_progress)
+                    .setCancelable(false)
+                    .create();
+        }
+        if (!mStartupProgressDialog.isShowing()) {
+            mStartupProgressDialog.show();
+            // 启动日志轮询，实时回显 echo 输出
+            mStartupLogHandler.removeCallbacks(mStartupLogPoller);
+            mStartupLogHandler.post(mStartupLogPoller);
+        }
+    }
+
+    /** 关闭启动初始化旋转等待对话框 */
+    private void dismissStartupProgressDialog() {
+        if (mStartupProgressDialog != null && mStartupProgressDialog.isShowing()) {
+            mStartupProgressDialog.dismiss();
+            // 停止日志轮询
+            mStartupLogHandler.removeCallbacks(mStartupLogPoller);
+        }
+    }
+
+    /** 更新启动进度对话框中的状态文本 */
+    private void updateStartupProgressText(String message) {
+        if (mStartupProgressDialog == null || !mStartupProgressDialog.isShowing()) {
+            return;
+        }
+        TextView statusText = mStartupProgressDialog.findViewById(R.id.reax_status_text);
+        if (statusText != null && message != null) {
+            statusText.setText(message);
+        }
+    }
+
+    /** 轮询读取启动日志并更新进度对话框 */
+    private void pollStartupLogs() {
+        if (mStartupProgressDialog == null || !mStartupProgressDialog.isShowing()) {
+            return;
+        }
+        TextView logText = mStartupProgressDialog.findViewById(R.id.reax_log_text);
+        if (logText == null) {
+            return;
+        }
+
+        String homeDir = System.getenv("HOME");
+        if (homeDir == null) {
+            homeDir = "/data/data/com.termux/files/home";
+        }
+        File logFile = new File(homeDir, "reax/common.log");
+        if (!logFile.exists()) {
+            return;
+        }
+
+        StringBuilder sb = new StringBuilder();
+        try (BufferedReader reader = new BufferedReader(new FileReader(logFile))) {
+            java.util.List<String> lines = new java.util.ArrayList<>();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                lines.add(line);
+                if (lines.size() > 15) {
+                    lines.remove(0); // 只保留最后15行
+                }
+            }
+            for (String l : lines) {
+                sb.append(l).append('\n');
+            }
+        } catch (IOException e) {
+            return;
+        }
+
+        String logTextStr = sb.toString().trim();
+        if (!logTextStr.isEmpty()) {
+            logText.setText(logTextStr);
+        }
     }
 
     @Override
@@ -517,6 +640,12 @@ private WebView mHomeWebView;
             }
         }
 
+        // 移除启动状态监听器，避免内存泄漏
+        TermuxStartupHelper.removeStartupListener(mStartupListener);
+        if (mStartupProgressDialog != null) {
+            mStartupProgressDialog.dismiss();
+            mStartupProgressDialog = null;
+        }
     }
     @Override
     public void onSaveInstanceState(@NonNull Bundle savedInstanceState) {

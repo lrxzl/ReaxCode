@@ -75,11 +75,11 @@ public class JavaBridge {
         this.homeWebView = homeWebView;
 
         // 给 invokeMethod 添加一个http-api接口服务
-        try {
+        /*try {
             new InvokeHttpApi(this, 9876);
         } catch (IOException e) {
             e.printStackTrace();
-        }
+        }*/
 
     }
 

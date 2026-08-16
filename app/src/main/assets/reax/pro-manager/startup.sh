@@ -7,6 +7,9 @@
 # ============================================
 echo "ready"
 set -u
+NOTIFY_LOG="${HOME}/reax/common.log"
+mkdir -p "$(dirname "$NOTIFY_LOG")" 2>/dev/null
+exec > >(tee -a "$NOTIFY_LOG") 2>&1
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR" || exit 1

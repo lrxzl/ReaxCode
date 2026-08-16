@@ -6,7 +6,7 @@
 
 set -u
 
-PROJECT_DIR="${HOME}/node-servers/pro-manager"
+PROJECT_DIR="${HOME}/reax/pro-manager"
 TARGET_BRANCH="${TARGET_BRANCH:-dev}"
 REPO_URL="${REPO_URL:-https://gitee.com/lrxzlcn/pro-manager.git}"
 LOG_FILE="${HOME}/update.log"
@@ -55,4 +55,4 @@ fi
 
 LOCAL_HASH=$(git rev-parse HEAD 2>/dev/null)
 echo "[update] 完成 $(date)，当前版本: ${LOCAL_HASH:0:7}"
-echo "[update] 提示：重启 App 或重新执行 pro-manager/startup.sh 让新代码生效"
+echo "[update] 提示：重启 App 或重新执行 reax/pro-manager/server/startup.sh 让新代码生效"

@@ -4,6 +4,9 @@
 # ============================================
 
 set -u
+NOTIFY_LOG="${HOME}/reax/common.log"
+mkdir -p "$(dirname "$NOTIFY_LOG")" 2>/dev/null
+exec > >(tee -a "$NOTIFY_LOG") 2>&1
 
 MARKER_FILE="${HOME}/.git-initialized"
 
