@@ -109,7 +109,7 @@ public class TermuxStartupHelper {
                     throw new RuntimeException("镜像源配置失败 (exit=" + mirrorsResult.exitCode + ") " + mirrorsResult.stderr);
                 }
 
-                notifyStartupProgress("步骤 2/4: 初始化 Node.js（首次约需 1~3 分钟）...");
+                notifyStartupProgress("步骤 2/4: 初始化 Node.js（首次约需1分钟）...");
                 File initNode = new File(shDir, "init_node.sh");
                 TermuxManager.CommandResult nodeResult = termuxManager.executeCommandWithTimeout("bash " + initNode.getAbsolutePath(), 360_000); // 6分钟超时
                 Logger.logInfo(LOG_TAG, "init_node.sh exitCode=" + nodeResult.exitCode + " stderr=" + nodeResult.stderr);

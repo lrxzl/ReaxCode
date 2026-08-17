@@ -52,8 +52,8 @@ public class FloatingWebView extends FrameLayout {
     private static ValueCallback<Uri[]> sPendingFilePathCallback;
 
     private OnCloseListener onCloseListener;
-    private static final float MIN_WIDTH_DP = 260f;
-    private static final float MIN_HEIGHT_DP = 120f;
+    private static final float MIN_WIDTH_DP = 60f;
+    private static final float MIN_HEIGHT_DP = 60f;
     private static final float DEFAULT_WIDTH_DP = 290f;
     private static final float DEFAULT_HEIGHT_DP = 460f;
     private static final float TITLE_BAR_HEIGHT_DP = 40f;
@@ -195,7 +195,7 @@ public class FloatingWebView extends FrameLayout {
 
             @Override
             public void onReceivedTitle(WebView view, String title) {
-                titleText.setText(title + specId );
+                titleText.setText(title/* + specId*/ );
             }
 
             // ===== HTML5 权限请求处理 =====
