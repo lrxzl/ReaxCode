@@ -312,9 +312,9 @@ private WebView mHomeWebView;
         if (mHomeWebViewFragment == null) {
             mHomeWebViewFragment = new HomeWebViewFragment();
             Bundle args = new Bundle();
-//            args.putString("url", "http://192.168.1.129:8084");
+            args.putString("url", "http://192.168.1.129:8084");
 //            args.putString("url", "file:///android_asset/playwright/index.html");
-            args.putString("url", "https://seeker-vue.xiangxiang.net.cn");
+//            args.putString("url", "https://seeker-vue.xiangxiang.net.cn");
             mHomeWebViewFragment.setArguments(args);
             getSupportFragmentManager().beginTransaction()
                     .replace(R.id.home_webview_container, mHomeWebViewFragment, "home_webview")
@@ -545,6 +545,9 @@ private WebView mHomeWebView;
         mIsOnResumeAfterOnCreate = false;
 
         initCDP();
+
+        // 回到前台时立即检查并恢复后台服务（reaxcode/pro-manager）
+        TermuxStartupHelper.checkServicesNow();
     }
 
     DevToolsPortForwarder devToolsPortForwarder;
