@@ -7,9 +7,6 @@ import com.termux.shared.logger.Logger;
 
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -39,8 +36,6 @@ public class TermuxStartupHelper {
     /** 当前是否正在执行启动初始化流程 */
     private static volatile boolean sIsStartupRunning = false;
 
-    /** 服务保活定时器 */
-    private static volatile ScheduledExecutorService sResumeScheduler = null;
 
     /** 查询启动初始化是否正在进行中 */
     public static boolean isStartupRunning() {
@@ -64,7 +59,7 @@ public class TermuxStartupHelper {
     private static final String TERMUX_HOME = "/data/data/com.termux/files/home";
 
     /** 修改此版本号会强制重新释放 reax 资源 */
-    private static final int ASSETS_VERSION = 13;
+    private static final int ASSETS_VERSION = 14;
 
     public static void start(Context context) {
         new Thread(() -> {
@@ -153,47 +148,28 @@ public class TermuxStartupHelper {
             }
         }, "termux-startup-thread").start();
 
-        // 启动服务保活监视器（每10秒检查 reaxcode/pro-manager 服务状态）
-        startResumeMonitor(context);
+        // 启动 ReaX 服务守护（monitor.sh，内部每10秒检查）
+        checkServicesNow();
     }
 
 
-    /**
-     * 启动定时检查服务（每10秒执行一次 resume.sh）
-     * 由 start() 调用，确保App启动后持续保活
-     */
-    public static void startResumeMonitor(Context context) {
-        if (sResumeScheduler != null) return;
-        sResumeScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
-            Thread t = new Thread(r, "resume-monitor");
-            t.setDaemon(true);
-            return t;
-        });
-        sResumeScheduler.scheduleWithFixedDelay(() -> {
-            try {
-                checkServicesNow();
-            } catch (Exception e) {
-                Logger.logStackTraceWithMessage(LOG_TAG, "定时检查服务异常", e);
-            }
-        }, 10, 10, TimeUnit.SECONDS);
-        Logger.logInfo(LOG_TAG, "已启动服务保活定时器（每10秒检查）");
-    }
 
     /**
-     * 立即执行一次 resume.sh，检查服务状态并恢复
+     * 启动 ReaX 服务守护（monitor.sh）
+     * 已在运行则跳过；否则启动后台守护循环
      */
     public static void checkServicesNow() {
         try {
-            File resumeSh = new File(TERMUX_HOME, "reax/resume.sh");
-            if (!resumeSh.exists()) {
-                Logger.logInfo(LOG_TAG, "resume.sh 不存在，跳过检查: " + resumeSh.getAbsolutePath());
+            File monitorSh = new File(TERMUX_HOME, "reax/monitor.sh");
+            if (!monitorSh.exists()) {
+                Logger.logInfo(LOG_TAG, "monitor.sh 不存在，跳过守护启动: " + monitorSh.getAbsolutePath());
                 return;
             }
-            Logger.logInfo(LOG_TAG, "执行 resume.sh 检查服务...");
+            Logger.logInfo(LOG_TAG, "启动 monitor.sh 服务守护...");
             TermuxManager.getInstance().executeCommandSync(
-                "nohup bash " + resumeSh.getAbsolutePath() + " < /dev/null >> " + TERMUX_HOME + "/reax/resume-monitor.log 2>&1 &");
+                "nohup bash " + monitorSh.getAbsolutePath() + " < /dev/null >> " + TERMUX_HOME + "/reax/monitor.log 2>&1 &");
         } catch (Exception e) {
-            Logger.logStackTraceWithMessage(LOG_TAG, "执行 resume.sh 异常", e);
+            Logger.logStackTraceWithMessage(LOG_TAG, "启动 monitor.sh 异常", e);
         }
     }
 
