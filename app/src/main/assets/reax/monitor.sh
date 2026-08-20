@@ -12,12 +12,12 @@ LOCK_FILE="${SCRIPT_DIR}/monitor.pid"
 
 # 日志函数
 log() {
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "${NOTIFY_LOG}"
+  #echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "${NOTIFY_LOG}"
 }
 
 # 确保单实例运行
 if [ -f "${LOCK_FILE}" ] && kill -0 "$(cat "${LOCK_FILE}")" 2>/dev/null; then
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] monitor.sh 已在运行 (PID=$(cat "${LOCK_FILE}"))，退出..."
+  log "monitor.sh 已在运行 (PID=$(cat "${LOCK_FILE}"))，退出..."
   exit 0
 fi
 echo $$ > "${LOCK_FILE}"

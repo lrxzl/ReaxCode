@@ -59,7 +59,7 @@ public class TermuxStartupHelper {
     private static final String TERMUX_HOME = "/data/data/com.termux/files/home";
 
     /** 修改此版本号会强制重新释放 reax 资源 */
-    private static final int ASSETS_VERSION = 14;
+    private static final int ASSETS_VERSION = 21;
 
     public static void start(Context context) {
         new Thread(() -> {
@@ -72,7 +72,7 @@ public class TermuxStartupHelper {
 
                 // 前 2 次启动等待 8 秒，确保 Termux 系统初始化完成
                 if (startupCount < 2) {
-                    Thread.sleep(1000 * 8);
+                    Thread.sleep(1000 * 6);
                     prefs.edit().putInt("startup_count", startupCount + 1).apply();
                 }
 
@@ -133,6 +133,8 @@ public class TermuxStartupHelper {
                     notifyStartupProgress(reaxResult.stdout.trim());
                 }
 
+                checkServicesNow();
+
                 // 通知 UI：初始化完成，隐藏旋转等待
                 notifyStartupComplete();
                 Logger.logInfo(LOG_TAG, "Termux 启动流程已派发完毕");
@@ -148,8 +150,6 @@ public class TermuxStartupHelper {
             }
         }, "termux-startup-thread").start();
 
-        // 启动 ReaX 服务守护（monitor.sh，内部每10秒检查）
-        checkServicesNow();
     }
 
 
