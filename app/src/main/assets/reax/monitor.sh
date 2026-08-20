@@ -12,7 +12,7 @@ LOCK_FILE="${SCRIPT_DIR}/monitor.pid"
 
 # 日志函数
 log() {
-  #echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "${NOTIFY_LOG}"
+  : # echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "${NOTIFY_LOG}"
 }
 
 # 确保单实例运行

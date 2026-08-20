@@ -1,6 +1,6 @@
 #!/bin/bash
 log() {
-  #echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+  : #echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
 }
 NOTIFY_LOG="${HOME}/reax/common.log"
 mkdir -p "$(dirname "$NOTIFY_LOG")" 2>/dev/null
