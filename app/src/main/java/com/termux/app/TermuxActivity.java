@@ -87,6 +87,7 @@ import java.util.Arrays;
 
 import android.app.AlertDialog;
 
+import cn.net.xiangxiang.seeker.AppConfig;
 import cn.net.xiangxiang.seeker.DevToolsPortForwarder;
 import cn.net.xiangxiang.seeker.JavaBridge;
 import cn.net.xiangxiang.seeker.PaymentSchemeHandler;
@@ -312,9 +313,9 @@ private WebView mHomeWebView;
         if (mHomeWebViewFragment == null) {
             mHomeWebViewFragment = new HomeWebViewFragment();
             Bundle args = new Bundle();
-            args.putString("url", "http://192.168.1.129:8084");
+//            args.putString("url", "http://192.168.1.129:8084");
 //            args.putString("url", "file:///android_asset/playwright/index.html");
-//            args.putString("url", "https://seeker-vue.xiangxiang.net.cn");
+            args.putString("url", AppConfig.MAIN_WEB_VIEW_URL);
             mHomeWebViewFragment.setArguments(args);
             getSupportFragmentManager().beginTransaction()
                     .replace(R.id.home_webview_container, mHomeWebViewFragment, "home_webview")
@@ -330,7 +331,7 @@ private WebView mHomeWebView;
             }
             if (savedInstanceState == null) {
                 if (webView.getUrl() == null) {
-                    webView.loadUrl("https://seeker-vue.xiangxiang.net.cn");
+                    webView.loadUrl(AppConfig.MAIN_WEB_VIEW_URL);
                 }
             }
             // 鏍规嵁 mStartWithWebView 鎺у埗 WebView 鍙鎬?
