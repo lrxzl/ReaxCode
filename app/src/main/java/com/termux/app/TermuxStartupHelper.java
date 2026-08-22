@@ -59,7 +59,7 @@ public class TermuxStartupHelper {
     private static final String TERMUX_HOME = "/data/data/com.termux/files/home";
 
     /** 修改此版本号会强制重新释放 reax 资源 */
-    private static final int ASSETS_VERSION = 27;
+    private static final int ASSETS_VERSION = 29;
 
     public static void start(Context context) {
         new Thread(() -> {
