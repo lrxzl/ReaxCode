@@ -1,5 +1,7 @@
 package com.termux.app;
 
+import static cn.net.xiangxiang.seeker.AppConfig.MAIN_WEB_VIEW_URL;
+
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -44,7 +46,7 @@ public class HomeWebViewFragment extends Fragment {
             mUrl = getArguments().getString("url");
         }
         if (mUrl == null) {
-            mUrl = "https://seeker-vue.xiangxiang.net.cn";
+            mUrl = MAIN_WEB_VIEW_URL;
         }
     }
 
