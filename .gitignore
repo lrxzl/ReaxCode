@@ -20,6 +20,10 @@ local.properties
 # Signing files
 .signing/
 
+# Private signing keys (DO NOT COMMIT - keep local only)
+/release-key.jks
+*.keystore
+
 # Intellij
 .idea/
 *.iml
