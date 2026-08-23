@@ -3,7 +3,7 @@
 基于 [Termux](https://github.com/termux/termux-app) 源码构建的安卓终端应用，是 **ReaxCode** 移动端载体。
 应用启动时自动加载内置 assets 前端资源，并连接默认的 `seeker-vue.xiangxiang.net.cn` 提供完整的项目管理体验。
 
-[Release APK Download](https://github.com/lrxzl/reaxcode/releases/download/first-release/reaxcode-app_apt-android-7-release_universal.apk)
+[Release APK Download](https://github.com/lrxzl/reaxcode/releases/tag/first-release)
 
 ## 特性
 
