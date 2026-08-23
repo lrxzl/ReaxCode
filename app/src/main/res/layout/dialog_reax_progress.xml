@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="24dp">
+
+    <ProgressBar
+        android:id="@+id/reax_progress_bar"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:indeterminate="true" />
+
+    <TextView
+        android:id="@+id/reax_status_text"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="正在初始化..."
+        android:textSize="14sp"
+        android:textColor="#666666"
+        android:minLines="2"
+        android:maxLines="8"
+        android:scrollbars="vertical" />
+
+    <TextView
+        android:id="@+id/reax_log_text"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:minLines="4"
+        android:maxLines="12"
+        android:scrollbars="vertical"
+        android:textSize="12sp"
+        android:textColor="#999999"
+        android:typeface="monospace" />
+</LinearLayout>
