@@ -40,7 +40,6 @@ http://storage.xiangxiang.net.cn/reaxcode-app_apt-android-7-release_universal.ap
 └── terminal-view/          # 终端视图库
 ```
 
-## 相关开源项目
 
 - [Termux](https://github.com/termux/termux-app) — 本项目的基础终端框架
 - [termux-packages](https://github.com/termux/termux-packages) — bootstrap 构建包来源

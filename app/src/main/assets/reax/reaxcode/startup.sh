@@ -14,35 +14,9 @@ if netstat -tln 2>/dev/null | grep -q ':8089 '; then
     exit 0
 fi
 
-# ---------- 自动更新reaxcode（每天只检查一次） ----------
-UPDATE_INTERVAL=43200  # 12小时（秒）
-UPDATE_FLAG="${HOME}/.reaxcode_last_update"
-export PATH="${PATH}:/data/data/com.termux/files/usr/bin"
+npm install -g reaxcode@latest &
 
-do_update() {
-    log "执行更新检查..."
-    npm install -g reaxcode@latest 2>&1 | tee -a "$NOTIFY_LOG"
-    if [ $? -eq 0 ]; then
-        log "更新成功"
-    else
-        log "更新失败"
-    fi
-    touch "$UPDATE_FLAG"  # 更新标记时间
-}
-
-if [ -f "$UPDATE_FLAG" ]; then
-    last_update=$(stat -c %Y "$UPDATE_FLAG" 2>/dev/null || stat -f %m "$UPDATE_FLAG" 2>/dev/null)
-    now=$(date +%s)
-    if [ $((now - last_update)) -ge $UPDATE_INTERVAL ]; then
-        do_update
-    else
-        log "距离上次更新不足24小时，跳过更新"
-    fi
-else
-    do_update  # 第一次运行强制更新
-fi
-# ------------------------------------------------
-
+# 优先使用全局安装的 reaxcode（node 直接启动，绕开 /usr/bin/env 缺失问题）
 REAXCODE_SERVER="/data/data/com.termux/files/usr/lib/node_modules/reaxcode/server.js"
 if [ -f "$REAXCODE_SERVER" ]; then
     log "使用全局安装的 reaxcode: $REAXCODE_SERVER"
@@ -52,5 +26,19 @@ if [ -f "$REAXCODE_SERVER" ]; then
     exit 0
 fi
 
-log "全局安装缺失，尝试 npx..."
+# 全局不存在时自动安装
+log "未找到全局 reaxcode，正在安装..."
+export PATH="${PATH}:/data/data/com.termux/files/usr/bin"
+if npm install -g reaxcode@latest 2>&1; then
+    if [ -f "$REAXCODE_SERVER" ]; then
+        log "安装成功，启动 reaxcode: $REAXCODE_SERVER"
+        nohup node "$REAXCODE_SERVER" < /dev/null >> "${HOME}/reax/reaxcode-server.log" 2>&1 &
+        REAXCODE_PID=$!
+        log "reaxcode 已后台启动 (PID: $REAXCODE_PID, 端口 8089)"
+        exit 0
+    fi
+fi
+
+# 兜底：使用 npx（可能因 /usr/bin/env 缺失而失败）
+log "安装失败，尝试 npx..."
 npx --prefer-online -y reaxcode@latest --yes >> "$NOTIFY_LOG" 2>&1 &
