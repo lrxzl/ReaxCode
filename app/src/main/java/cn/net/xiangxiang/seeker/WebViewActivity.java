@@ -152,6 +152,9 @@ private static final String LOG_TAG = "WebViewActivity";
         mFileChooser = new WebViewConfig.FileChooserHelper();
 
         webView.setWebChromeClient(mFileChooser.createWebChromeClient(this));
+
+        // ===== 统一处理下载链接（系统 DownloadManager + 浏览器兜底）=====
+        DownloadHandler.attach(webView);
         
         Logger.logDebug(LOG_TAG, "WebView配置完成");
     }

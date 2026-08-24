@@ -14,6 +14,7 @@ import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 import cn.net.xiangxiang.seeker.JavaBridgeConstants;
 import cn.net.xiangxiang.seeker.WebViewConfig;
+import cn.net.xiangxiang.seeker.DownloadHandler;
 
 public class HomeWebViewFragment extends Fragment {
 
@@ -74,6 +75,9 @@ public class HomeWebViewFragment extends Fragment {
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
         settings.setMediaPlaybackRequiresUserGesture(false);
+
+        // ===== 统一处理下载链接（系统 DownloadManager + 浏览器兜底）=====
+        DownloadHandler.attach(mWebView);
 
         mWebView.setWebViewClient(new WebViewClient() {
             @Override

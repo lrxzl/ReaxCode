@@ -191,6 +191,9 @@ public class FloatingWebView extends FrameLayout {
         settings.setSupportZoom(true);
         settings.setBuiltInZoomControls(true);
         settings.setDisplayZoomControls(false);
+
+        // ===== 统一处理下载链接（系统 DownloadManager + 浏览器兜底）=====
+        DownloadHandler.attach(webView);
         webView.setWebChromeClient(new WebChromeClient() {
 
             @Override
@@ -541,6 +544,21 @@ public class FloatingWebView extends FrameLayout {
                 // 加载后确保焦点和层级
                 requestFocus();
                 bringToFront();
+            })
+            .setNeutralButton("外部浏览器打开", (dialog, which) -> {
+                String url = input.getText().toString().trim();
+                if (url.isEmpty()) return;
+                // 自动补充协议
+                if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                    url = "https://" + url;
+                }
+                try {
+                    Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    getContext().startActivity(intent);
+                } catch (Exception e) {
+                    android.widget.Toast.makeText(getContext(), "无法打开外部浏览器: " + e.getMessage(), android.widget.Toast.LENGTH_SHORT).show();
+                }
             })
             .setNegativeButton("取消", null)
             .show();
