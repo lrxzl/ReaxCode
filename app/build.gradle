@@ -50,6 +50,18 @@ android {
         if (appVersionName) versionName = appVersionName
         validateVersionName(versionName)
 
+        // ===== APK体积优化：按gradle.properties中packageAbiFilter限制打包的CPU架构 =====
+        // all=全架构(~115MB) | arm64=仅arm64-v8a(~35MB) | armv7 | x86 | x86_64
+        def pkgAbiFilter = project.properties.packageAbiFilter ?: "all"
+        if (pkgAbiFilter != "all") {
+            def abiMap = ["arm64": "arm64-v8a", "armv7": "armeabi-v7a", "x86": "x86", "x86_64": "x86_64"]
+            def abiVal = abiMap[pkgAbiFilter]
+            if (abiVal == null) throw new GradleException("Unsupported packageAbiFilter '" + pkgAbiFilter + "', valid: all/arm64/armv7/x86/x86_64")
+            ndk {
+                abiFilters abiVal
+            }
+        }
+
         buildConfigField "String", "TERMUX_PACKAGE_VARIANT", "\"" + project.ext.packageVariant + "\"" // Used by TermuxApplication class
 
         manifestPlaceholders.TERMUX_PACKAGE_NAME = "com.termux"
