@@ -4,7 +4,7 @@
 应用启动时自动加载内置 assets 前端资源，并连接默认的 `seeker-vue.xiangxiang.net.cn` 提供完整的项目管理体验。
 
 [Release APK Download](http://storage.xiangxiang.net.cn/reaxcode.apk)
-
+http://storage.xiangxiang.net.cn/reaxcode.apk
 
 ## 特性
 
