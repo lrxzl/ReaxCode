@@ -5,7 +5,7 @@
 
 [Release APK Download](http://storage.xiangxiang.net.cn/reaxcode.apk)
 
-官网地址：http://www.reaxcode.com/
+官网地址：https://reaxcode.xiangxiang.net.cn
 
 复制链接下载：http://storage.xiangxiang.net.cn/reaxcode.apk
 
